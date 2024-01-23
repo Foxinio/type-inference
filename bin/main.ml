@@ -1,5 +1,8 @@
 (** The main module of a inerpreter *)
 
+open Prototyp_lib
+open Core
+
 let check_invariant f p =
   f p;
   p

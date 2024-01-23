@@ -27,6 +27,8 @@ let kw_map =
   ; "then",   KW_THEN
   ; "true",   KW_TRUE
   ; "with",   KW_WITH
+  ; "type",   KW_TYPE
+  ; "begin",  KW_BEGIN
   ] |> List.to_seq |> Hashtbl.of_seq
 
 let tokenize_ident str =

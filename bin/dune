@@ -1,7 +1,7 @@
 (executable
  (public_name prototyp)
  (name main)
- (libraries prototyp parser))
+ (libraries prototyp_lib core))
 
 (env
     (dev

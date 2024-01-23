@@ -9,7 +9,6 @@ type 'a node = {
 
 (** Variables, field labels, and constructors are represented as strings *)
 type var       = string
-(* type field     = string *)
 type ctor_name = string
 
 (** Expressions. Each node stores additional information about the location
@@ -25,9 +24,9 @@ and expr_data =
   | ENum    of int
   | EVar    of var
   | EFn     of var list * expr
-  | EFix    of var * var * expr
+  | EFix    of var * var list * expr
   | EApp    of expr * expr list
-  | ELet    of var list * expr * expr
+  | ELet    of var * expr * expr
   | EPair   of expr * expr
   | EFst    of expr
   | ESnd    of expr
@@ -37,8 +36,6 @@ and expr_data =
   | EIf     of expr * expr * expr
   | ESeq    of expr * expr
   | EAbsurd of expr
-  (* | ESelect of expr * field *)
-  (* | ERecord of field_def list *)
   | ECtor   of ctor_name * expr
   (* EMatch(e, c, (x1, e1), (x2, e2)) stands
     for (match e with c x1 => e1 | x2 => e2 end) *)
