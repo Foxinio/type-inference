@@ -35,11 +35,9 @@ module Type : sig
 
   exception Cannot_compare of t * t
   val compare : t -> t -> int
-
-  val shorten : t -> unit
 end = struct
   type t = view
-  and uvar = t list ref
+  and uvar = t option ref
   and view =
     | TUnit
     | TEmpty
@@ -50,8 +48,8 @@ end = struct
     | TProd   of t list
     | TCoProd of t list
 
-  let fresh_uvar () = TUVar (ref [])
-  let filled_uvar tp = TUVar (ref [ tp ])
+  let fresh_uvar () = TUVar (ref None)
+  let filled_uvar tp = TUVar (ref (Some tp))
 
   let t_unit  = TUnit
   let t_empty = TEmpty
@@ -64,20 +62,29 @@ end = struct
   let t_prod   tps = TProd(tps)
   let t_coprod tps = TCoProd(tps)
 
+
+  let rec view tp =
+    match tp with
+    | TUVar x ->
+      begin match !x with
+      | None -> tp
+      | Some tp ->
+        let tp = view tp in
+        x := Some tp;
+        tp
+      end
+    | _ -> tp
+
   exception Cannot_compare of t * t
 
-  let rec shorten = function
-    | TUVar x -> shorten_list !x;
-    | TUnit | TEmpty | TBool | TInt -> ()
-    | TArrow (tp1, tp2) ->
-        shorten tp1;
-        shorten tp2;
-    | TProd tps
-    | TCoProd tps ->
-        List.iter shorten tps
-  and shorten_list = failwith "unimplemented"
+  let rec set_uvar x tp =
+    match !x with
+    | None -> x := Some tp
+    | Some tp_current when compare tp tp_current >= 0 ->
+        x := Some tp
+    | Some _ -> assert false
 
-  let rec compare tp1 tp2 =
+  and compare tp1 tp2 =
       let merge_compare cmp1 cmp2 =
         if cmp1 * cmp2 > 0 then cmp1
         else if cmp1 = 0 then cmp2
@@ -88,41 +95,40 @@ end = struct
         let res = compare l r in
         merge_compare res acc
       in
-      let rec compare_arrows acc (tps1, tp_resa) (tps2, tp_resb) =
-        match tps1, tps2 with
-        | tpa :: tps1, tpb :: tps2 ->
+      let rec compare_arrows acc (tps1a, tps1b, tp_resa) (tps2, tp_resb) =
+        match tps1a, tps2 with
+        | tpa :: tps1a, tpb :: tps2 ->
             let res = compare tpa tpb in
-            compare_arrows (merge_compare res acc) (tps1, tp_resa) (tps2, tp_resb)
+            compare_arrows (merge_compare res acc) (tps1a, tps1b, tp_resa) (tps2, tp_resb)
         | [], _ :: _ ->
-            failwith "needs rules for subtyping with unification variables"
-        | _, _ -> failwith "unimplemented"
+            merge_compare acc (compare (TArrow (TProd tps1b, tp_resa))
+                                       (TArrow (TProd tps2,  tp_resb)))
+        | _ :: _, [] ->
+            (* this means previous type was to general and if return type is *)
+            begin match view tp_resb with
+            | TUVar x ->
+              failwith "to implement"
+            | TArrow (TProd tps2, tp_resb) ->
+                compare_arrows acc (tps1a, tps1b, tp_resa) (tps2, tp_resb)
+            | _ -> raise (Cannot_compare (tp1, tp2))
+            end
+        | [], [] ->
+            merge_compare acc (compare tp_resa tp_resb)
       in
     match tp1, tp2 with
     | TUVar x, TUVar y when x == y -> 0
-    | TUVar x, _ -> compare_uvar x tp2
-    | _, TUVar x -> -1 * compare_uvar x tp2
+    | TUVar x, TUVar y -> compare_uvar x y
 
     | TUnit, TUnit -> 0
-    | TUnit, _ -> -1
-    | _, TUnit -> 1
 
     | TEmpty, TEmpty -> 0
-    | _, TEmpty -> -1
-    | TEmpty, _ -> 1
 
     | TBool, TBool -> 0
     | TInt, TInt -> 0
 
     | TArrow (TProd tps1a, TArrow (TProd tps2a, tp_resa)),
-      TArrow (TProd tps1b, TArrow (TProd tps2b, tp_resb)) ->
-        let args = compare_arrows 0 (List.append tps1a tps2a, tp_resa) (List.append tps1b tps2b, tp_resb) in
-        let res = compare tp_resa tp_resb in
-        merge_compare args res
-    | TArrow (TProd tps1a, TArrow (TProd tps2a, tp_resa)),
       TArrow (TProd tps1b, tp_resb) ->
-        let args = compare_arrows 0 (List.append tps1a tps2a, tp_resa) (tps1b, tp_resb) in
-        let res = compare tp_resa tp_resb in
-        merge_compare args res
+        compare_arrows 0 (tps1a, tps2a, tp_resa) (tps1b, tp_resb)
 
     | TArrow (TProd _, _),
       TArrow (TProd _, TArrow (TProd _, _)) ->
@@ -135,26 +141,16 @@ end = struct
     | TCoProd(ts1), TCoProd(ts2) ->
       List.fold_left2 compare_acc 0 ts1 ts2
     | _, _ -> raise (Cannot_compare (tp1, tp2))
-  and compare_uvar x tp = failwith "unimplemented"
-
-
-  let rec view tp =
-    match tp with
-    | TUVar x ->
-      begin match !x with
-      | [] -> tp
-      | tp :: tps ->
-        let tp = view tp in
-        x := tp :: tps;
-        tp
-      end
-    | _ -> tp
-
-  let set_uvar x tp =
-    match !x with
-    | [] -> x := [ tp ]
-    (* | Some (TArrow _), TArrow _ -> x := Some tp *)
-    | tps -> x := tp :: tps;
+  and compare_uvar x y =
+    match !x, !y with
+    | Some tp1, Some tp2 -> compare tp1 tp2
+    | None, None -> 
+        (* [question] Maybe problematic, but seems like good solution *)
+        let new_var = fresh_uvar () in
+        set_uvar x new_var;
+        set_uvar y new_var;
+        0
+    | _, _ -> raise (Cannot_compare (TUVar x, TUVar y))
 
 
 end
@@ -361,8 +357,7 @@ let rec infer_type env (e : Ast.expr) =
 and check_type env (e : Ast.expr) tp =
   let tp' = infer_type env e in
   try
-    unify tp tp';
-    Type.shorten tp;
+    unify tp tp'
   with
   | Cannot_unify ->
     let ctx = pp_context () in
