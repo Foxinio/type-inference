@@ -36,7 +36,7 @@ module Type : sig
   val set_uvar : uvar -> t -> unit
 
   exception Cannot_compare of t * t
-  val compare : t -> t -> int
+  (* val compare : t -> t -> int *)
 end = struct
   type t = 
     | TIUnit
@@ -120,78 +120,6 @@ end = struct
         x := Some tp
     | Some _ -> assert false
 
-  and compare tp1 tp2 =
-      let merge_compare cmp1 cmp2 =
-        if cmp1 * cmp2 > 0 then cmp1
-        else if cmp1 = 0 then cmp2
-        else if cmp2 = 0 then cmp1
-        else raise (Cannot_compare (tp1, tp2))
-      in
-      let compare_acc acc l r = 
-        let res = compare l r in
-        merge_compare res acc
-      in
-      let rec compare_arrows acc (tps1a, tps1b, tp_resa) (tps2, tp_resb) =
-        match tps1a, tps2 with
-        | tpa :: tps1a, tpb :: tps2 ->
-            let res = compare tpa tpb in
-            compare_arrows (merge_compare res acc) (tps1a, tps1b, tp_resa) (tps2, tp_resb)
-        | [], _ :: _ ->
-            merge_compare acc (compare (TIArrow (TIProd tps1b, tp_resa))
-                                       (TIArrow (TIProd tps2,  tp_resb)))
-        | _ :: _, [] ->
-            (* this means previous type was to general and if return type is *)
-            begin match view tp_resb with
-            | TUVar (x, None) ->
-              failwith "to implement"
-            | TArrow (TProd tps2, tp_resb) ->
-                (* this means that this type was previously partitioned in different way
-                  and so this comparison must fail or force this to be totally different type *)
-                raise (Cannot_compare (tp1, tp2))
-                (* compare_arrows acc (tps1a, tps1b, tp_resa) (tps2, tp_resb) *)
-            | _ -> raise (Cannot_compare (tp1, tp2))
-            end
-        | [], [] ->
-            merge_compare acc (compare tp_resa tp_resb)
-      in
-    match tp1, tp2 with
-    | TIUVar x, TIUVar y when x == y -> 0
-    | TIUVar x, TIUVar y -> compare_uvar x y
-
-    | TIUnit, TIUnit -> 0
-    | TIUnit, _     -> 1
-    | _, TIUnit    -> -1
-
-    | TIEmpty, TIEmpty -> 0
-    | TIEmpty, _     -> 1
-    | _, TIEmpty    -> -1
-
-    | TIBool, TIBool -> 0
-    | TIInt, TIInt -> 0
-
-    | TIArrow (TIProd tps1a, TIArrow (TIProd tps2a, tp_resa)),
-      TIArrow (TIProd tps1b, tp_resb) ->
-        compare_arrows 0 (tps1a, tps2a, tp_resa) (tps1b, tp_resb)
-
-    | TIArrow(ta1, tb1), TIArrow(ta2, tb2) ->
-        let cmp1 = compare ta2 ta1 in
-        let cmp2 = compare tb1 tb2 in
-        merge_compare cmp1 cmp2
-    | TIProd(ts1), TIProd(ts2)
-    | TICoProd(ts1), TICoProd(ts2) ->
-      List.fold_left2 compare_acc 0 ts1 ts2
-    | _, _ -> raise (Cannot_compare (tp1, tp2))
-  and compare_uvar x y =
-    match !x, !y with
-    | Some tp1, Some tp2 -> compare tp1 tp2
-    | None, None -> 
-        (* [question] Maybe problematic, but seems like good solution *)
-        let new_var = fresh_uvar () in
-        set_uvar x new_var;
-        set_uvar y new_var;
-        0
-    | _, _ -> raise (Cannot_compare (TIUVar x, TIUVar y))
-
   and reconstruct (new_tp : t) (currrnet_tp : t) =
     let rec reconstruct_arrows (tpsa, resa) (tpsb, resb) =
       match tpsa, tpsb with
@@ -203,29 +131,13 @@ end = struct
       | [], _ :: _ ->
           [], reconstruct resa (TIArrow (TIProd tpsb, resb))
       | _ :: _, [] ->
-          (* we have this case:
-           *  (t1,...,ti,...tk) -> t  <?: (t1,...,ti) -> t'
-           *)
           begin match view resb with
-          (* if t' is UVar or GVar
-           *  t' := (ti+1,...,tk) -> t
-           * and return
-           * [], TArrow ([ti+1,...,tk], t)
-           *)
-          | TUVar (y, _) ->
-              let res = reconstruct (TIArrow (TIProd tpsa, resa)) resb in
-              [], res
-          | TArrow (TProd tpsb, resb) ->
-          (* if t' is already  TArrow (ti+1',...,tl') -> t''
-           * we need to make a cut here and continue reconstructing
-           *)
-              let args, res = reconstruct_arrows (tpsa, resa) (tpsb, resb) in
-              [], t_arrow args res
-              (* [], reconstruct (TIArrow (TIProd tps2, resa)) (TIArrow (TIProd tpsb, resb)) *)
+          | TGVar _
+          | TUVar _
+          | TArrow (TProd _, _) ->
+              [], reconstruct (TIArrow (TIProd tpsa, resa)) resb
           | _ -> raise (Cannot_compare (new_tp, currrnet_tp))
           end
-
-          (* TIArrow (TIProd tps1a, resb) *)
       | [], [] ->
           [], reconstruct resa resb
     in
