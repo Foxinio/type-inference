@@ -12,12 +12,14 @@ module Type : sig
     | TEmpty
     | TBool
     | TInt
-    | TUVar   of uvar
-    | TArrow  of t * t
+    | TGVar   of uvar * view option
+    | TUVar   of uvar * view option
+    | TArrow  of view * t
     | TProd   of t list
     | TCoProd of t list
 
   val fresh_uvar : unit -> t
+  val fresh_gvar : unit -> t
 
   val t_unit   : t
   val t_empty  : t
@@ -36,51 +38,85 @@ module Type : sig
   exception Cannot_compare of t * t
   val compare : t -> t -> int
 end = struct
-  type t = view
+  type t = 
+    | TIUnit
+    | TIEmpty
+    | TIBool
+    | TIInt
+    | TIGVar   of uvar
+    | TIUVar   of uvar
+    | TIArrow  of t * t
+    | TIProd   of t list
+    | TICoProd of t list
+
   and uvar = t option ref
   and view =
     | TUnit
     | TEmpty
     | TBool
     | TInt
-    | TUVar   of uvar
-    | TArrow  of t * t
+    | TGVar   of uvar * view option
+    | TUVar   of uvar * view option
+    | TArrow  of view * t
     | TProd   of t list
     | TCoProd of t list
 
-  let fresh_uvar () = TUVar (ref None)
-  let filled_uvar tp = TUVar (ref (Some tp))
+  let fresh_uvar () = TIUVar (ref None)
+  let fresh_gvar () = TIGVar (ref None)
+  let filled_uvar tp = TIUVar (ref (Some tp))
 
-  let t_unit  = TUnit
-  let t_empty = TEmpty
-  let t_bool  = TBool
-  let t_int   = TInt
+  let t_unit  = TIUnit
+  let t_empty = TIEmpty
+  let t_bool  = TIBool
+  let t_int   = TIInt
   let t_arrow  tps tp2 = 
-    filled_uvar (TArrow(TProd(tps), tp2))
-  let t_pair   tp1 tp2 = TProd([tp1; tp2])
-  let t_copair tp1 tp2 = TCoProd([tp1; tp2])
-  let t_prod   tps = TProd(tps)
-  let t_coprod tps = TCoProd(tps)
+    filled_uvar (TIArrow(TIProd(tps), tp2))
+  let t_pair   tp1 tp2 = TIProd([tp1; tp2])
+  let t_copair tp1 tp2 = TICoProd([tp1; tp2])
+  let t_prod   tps = TIProd(tps)
+  let t_coprod tps = TICoProd(tps)
 
+  let rec t_of_view = function
+    | TUVar (x, _) -> TIUVar x
+    | TGVar (x, _) -> TIGVar x
+    | TUnit -> TIUnit
+    | TEmpty -> TIEmpty
+    | TBool -> TIBool
+    | TInt -> TIInt
+    | TArrow(tp1, tp2) -> TIArrow(t_of_view tp1, tp2)
+    | TProd tps -> TIProd tps
+    | TCoProd tps -> TICoProd tps
 
   let rec view tp =
-    match tp with
-    | TUVar x ->
-      begin match !x with
-      | None -> tp
+    let shorten_path x =
+      match !x with
+      | None -> ()
       | Some tp ->
         let tp = view tp in
-        x := Some tp;
-        tp
-      end
-    | _ -> tp
+        x := Some (t_of_view tp)
+    in
+    match tp with
+    | TIUVar x ->
+        shorten_path x;
+        TUVar (x, Option.map view (!x))
+    | TIGVar x ->
+        shorten_path x;
+        TGVar (x, Option.map view (!x))
+    | TIUnit -> TUnit
+    | TIEmpty -> TEmpty
+    | TIBool -> TBool
+    | TIInt -> TInt
+    | TIArrow(tp1, tp2) -> TArrow(view tp1, tp2)
+    | TIProd tps -> TProd tps
+    | TICoProd tps -> TCoProd tps
+
 
   exception Cannot_compare of t * t
 
-  let rec set_uvar x tp =
+  let rec set_uvar_int x tp general =
     match !x with
     | None -> x := Some tp
-    | Some tp_current when compare tp tp_current >= 0 ->
+    | Some tp_current when general && compare tp tp_current >= 0 ->
         x := Some tp
     | Some _ -> assert false
 
@@ -101,44 +137,48 @@ end = struct
             let res = compare tpa tpb in
             compare_arrows (merge_compare res acc) (tps1a, tps1b, tp_resa) (tps2, tp_resb)
         | [], _ :: _ ->
-            merge_compare acc (compare (TArrow (TProd tps1b, tp_resa))
-                                       (TArrow (TProd tps2,  tp_resb)))
+            merge_compare acc (compare (TIArrow (TIProd tps1b, tp_resa))
+                                       (TIArrow (TIProd tps2,  tp_resb)))
         | _ :: _, [] ->
             (* this means previous type was to general and if return type is *)
             begin match view tp_resb with
-            | TUVar x ->
+            | TUVar (x, None) ->
               failwith "to implement"
             | TArrow (TProd tps2, tp_resb) ->
-                compare_arrows acc (tps1a, tps1b, tp_resa) (tps2, tp_resb)
+                (* this means that this type was previously partitioned in different way
+                  and so this comparison must fail or force this to be totally different type *)
+                raise (Cannot_compare (tp1, tp2))
+                (* compare_arrows acc (tps1a, tps1b, tp_resa) (tps2, tp_resb) *)
             | _ -> raise (Cannot_compare (tp1, tp2))
             end
         | [], [] ->
             merge_compare acc (compare tp_resa tp_resb)
       in
     match tp1, tp2 with
-    | TUVar x, TUVar y when x == y -> 0
-    | TUVar x, TUVar y -> compare_uvar x y
+    | TIUVar x, TIUVar y when x == y -> 0
+    | TIUVar x, TIUVar y -> compare_uvar x y
 
-    | TUnit, TUnit -> 0
+    | TIUnit, TIUnit -> 0
+    | TIUnit, _     -> 1
+    | _, TIUnit    -> -1
 
-    | TEmpty, TEmpty -> 0
+    | TIEmpty, TIEmpty -> 0
+    | TIEmpty, _     -> 1
+    | _, TIEmpty    -> -1
 
-    | TBool, TBool -> 0
-    | TInt, TInt -> 0
+    | TIBool, TIBool -> 0
+    | TIInt, TIInt -> 0
 
-    | TArrow (TProd tps1a, TArrow (TProd tps2a, tp_resa)),
-      TArrow (TProd tps1b, tp_resb) ->
+    | TIArrow (TIProd tps1a, TIArrow (TIProd tps2a, tp_resa)),
+      TIArrow (TIProd tps1b, tp_resb) ->
         compare_arrows 0 (tps1a, tps2a, tp_resa) (tps1b, tp_resb)
 
-    | TArrow (TProd _, _),
-      TArrow (TProd _, TArrow (TProd _, _)) ->
-        -1 * compare tp2 tp1
-    | TArrow(ta1, tb1), TArrow(ta2, tb2) ->
+    | TIArrow(ta1, tb1), TIArrow(ta2, tb2) ->
         let cmp1 = compare ta2 ta1 in
         let cmp2 = compare tb1 tb2 in
         merge_compare cmp1 cmp2
-    | TProd(ts1), TProd(ts2)
-    | TCoProd(ts1), TCoProd(ts2) ->
+    | TIProd(ts1), TIProd(ts2)
+    | TICoProd(ts1), TICoProd(ts2) ->
       List.fold_left2 compare_acc 0 ts1 ts2
     | _, _ -> raise (Cannot_compare (tp1, tp2))
   and compare_uvar x y =
@@ -150,10 +190,95 @@ end = struct
         set_uvar x new_var;
         set_uvar y new_var;
         0
-    | _, _ -> raise (Cannot_compare (TUVar x, TUVar y))
+    | _, _ -> raise (Cannot_compare (TIUVar x, TIUVar y))
+
+  and reconstruct (new_tp : t) (currrnet_tp : t) =
+    let rec reconstruct_arrows (tpsa, resa) (tpsb, resb) =
+      match tpsa, tpsb with
+      | tpa :: tpsa, tpb :: tpsb ->
+          (* because arguments in arrows are contravariant these are reversed *)
+          let tp = reconstruct tpb tpa in
+          let rest, res = reconstruct_arrows (tpsa, resa) (tpsb, resb) in
+          tp :: rest, res
+      | [], _ :: _ ->
+          [], reconstruct resa (TIArrow (TIProd tpsb, resb))
+      | _ :: _, [] ->
+          (* we have this case:
+           *  (t1,...,ti,...tk) -> t  <?: (t1,...,ti) -> t'
+           *)
+          begin match view resb with
+          (* if t' is UVar or GVar
+           *  t' := (ti+1,...,tk) -> t
+           * and return
+           * [], TArrow ([ti+1,...,tk], t)
+           *)
+          | TUVar (y, _) ->
+              let res = reconstruct (TIArrow (TIProd tpsa, resa)) resb in
+              [], res
+          | TArrow (TProd tpsb, resb) ->
+          (* if t' is already  TArrow (ti+1',...,tl') -> t''
+           * we need to make a cut here and continue reconstructing
+           *)
+              let args, res = reconstruct_arrows (tpsa, resa) (tpsb, resb) in
+              [], t_arrow args res
+              (* [], reconstruct (TIArrow (TIProd tps2, resa)) (TIArrow (TIProd tpsb, resb)) *)
+          | _ -> raise (Cannot_compare (new_tp, currrnet_tp))
+          end
+
+          (* TIArrow (TIProd tps1a, resb) *)
+      | [], [] ->
+          [], reconstruct resa resb
+    in
+    let uvar_map x tp fn =
+      match !x with
+      | None ->
+          x := Some tp;
+          tp
+      | Some tp ->
+          let res = fn tp in
+          x := Some res;
+          res
+    in
+    match new_tp, currrnet_tp with
+    | TIUVar x, _ ->
+        uvar_map x currrnet_tp (fun _ -> raise (Cannot_compare (new_tp, currrnet_tp)))
+    | TIGVar x, _ ->
+        uvar_map x currrnet_tp (fun tp -> reconstruct tp currrnet_tp)
+    | _, TIUVar x ->
+        uvar_map x new_tp (fun _ -> raise (Cannot_compare (new_tp, currrnet_tp)))
+    | _, TIGVar x ->
+        uvar_map x new_tp (fun tp -> reconstruct new_tp tp)
+    | TIUnit, TIUnit -> TIUnit
+    | _, TIUnit    -> TIUnit
+
+    | TIEmpty, TIEmpty -> TIEmpty
+    | TIEmpty, _     -> TIEmpty
+
+    | TIBool, TIBool -> TIBool
+    | TIInt, TIInt -> TIInt
+
+    | TIArrow (TIProd tpsa, tp_resa),
+      TIArrow (TIProd tpsb, tp_resb) ->
+        let args, res = reconstruct_arrows (tpsa, tp_resa) (tpsb, tp_resb) in
+        t_arrow args res
+
+    | TIArrow(ta1, tb1), TIArrow(ta2, tb2) ->
+        let res1 = reconstruct ta2 ta1 in
+        let res2 = reconstruct tb1 tb2 in
+        TIArrow(res1, res2)
+    | TIProd(ts1), TIProd(ts2) when List.length ts1 = List.length ts2 ->
+      TIProd (List.map2 reconstruct ts1 ts2)
+    | TICoProd(ts1), TICoProd(ts2) when List.length ts1 = List.length ts2 ->
+      TICoProd (List.map2 reconstruct ts1 ts2)
+    | _, _ -> raise (Cannot_compare (new_tp, currrnet_tp))
 
 
+  let set_uvar x tp =
+    set_uvar_int x tp false
+  let set_gvar x tp =
+    set_uvar_int x tp true
 end
+open Type
 
 (* ========================================================================= *)
 (* Pretty printing of types *)
@@ -167,33 +292,48 @@ let pp_at_level l lvl str =
 
 
 let rec pp_type ctx lvl tp =
-  match Type.view tp with
-  | TUnit  -> "Unit"
-  | TEmpty -> "Empty"
-  | TBool  -> "Bool"
-  | TInt   -> "Int"
-  | TUVar x ->
-    begin match List.assq_opt x !ctx with
-    | Some str -> str
-    | None ->
-      let name = Printf.sprintf "x%d" (List.length !ctx) in
-      ctx := (x, name) :: !ctx;
-      name
-    end
-  | TArrow(tp1, tp2) ->
-    pp_at_level 0 lvl
-      (Printf.sprintf "%s -> %s" (pp_type ctx 1 tp1) (pp_type ctx 0 tp2))
-  | TProd(tps) ->
-    pp_at_level 2 lvl
-      (Printf.sprintf "%s" (pp_list "*" ctx 3 tps))
-  | TCoProd(tps) ->
-    pp_at_level 1 lvl
-      (Printf.sprintf "%s" (pp_list "+" ctx 2 tps))
-  and pp_list separator ctx lvl = function
-  | [ tp ] -> pp_type ctx (lvl-1) tp
-  | tp :: tps ->
-      Printf.sprintf "%s %s %s" (pp_type ctx lvl tp) separator (pp_list separator ctx lvl tps)
-  | [] -> "Unit"
+  let rec matcher lvl = function
+    | TUnit  -> "Unit"
+    | TEmpty -> "Empty"
+    | TBool  -> "Bool"
+    | TInt   -> "Int"
+    | TUVar (x, None) ->
+      begin match List.assq_opt x !ctx with
+      | Some str -> str
+      | None ->
+        let name = Printf.sprintf "x%d" (List.length !ctx) in
+        ctx := (x, name) :: !ctx;
+        name
+      end
+    | TUVar (x, Some tp) ->
+        matcher lvl tp
+    | TGVar (x, None) ->
+      begin match List.assq_opt x !ctx with
+      | Some str -> str
+      | None ->
+        let name = Printf.sprintf "x%d" (List.length !ctx) in
+        ctx := (x, name) :: !ctx;
+        name
+      end
+    | TGVar (x, Some tp) ->
+        matcher lvl tp
+    | TArrow(tp1, tp2) ->
+      pp_at_level 0 lvl
+        (Printf.sprintf "%s -> %s" (matcher 1 tp1) (pp_type ctx 0 tp2))
+    | TProd(tps) ->
+      pp_at_level 2 lvl
+        (Printf.sprintf "%s" (pp_list "*" ctx 3 tps))
+    | TCoProd(tps) ->
+      pp_at_level 1 lvl
+        (Printf.sprintf "%s" (pp_list "+" ctx 2 tps))
+    and pp_list separator ctx lvl = function
+    | [ tp ] -> pp_type ctx (lvl-1) tp
+    | tp :: tps ->
+        Printf.sprintf "%s %s %s" (pp_type ctx lvl tp) separator (pp_list separator ctx lvl tps)
+    | [] -> "Unit"
+  in Type.view tp |> matcher lvl
+
+let string_of_type = pp_type (pp_context ()) 0
 
 (* ========================================================================= *)
 (* Unification *)
@@ -204,48 +344,72 @@ let rec contains_uvar x tp =
   let rec list_contains_uvar = function
     | [] -> false
     | tp :: tps -> contains_uvar x tp || list_contains_uvar tps
-  in
-  match Type.view tp with
-  | TUVar y -> x == y
-  | TUnit | TEmpty | TBool | TInt -> false
-  | TArrow(tp1, tp2) ->
-    contains_uvar x tp1 || contains_uvar x tp2
-  | TProd(tps) | TCoProd(tps) ->
-    list_contains_uvar tps
+  and contains_uvar_int = function
+    | TUVar (y, None) -> x == y
+    | TUVar (_, Some tp)
+    | TGVar (_, Some tp) -> contains_uvar_int tp
+    | TUnit | TEmpty | TBool | TInt | TGVar (_, None) -> false
+    | TArrow(tp1, tp2) ->
+      contains_uvar_int tp1 || contains_uvar x tp2
+    | TProd(tps) | TCoProd(tps) ->
+      list_contains_uvar tps
+  in Type.view tp |> contains_uvar_int
 
 
 let unify_with_uvar x tp =
   if contains_uvar x tp then raise Cannot_unify
-  else Type.set_uvar x tp
+  else try
+    Type.set_uvar x tp
+  with Type.Cannot_compare _ ->
+    raise Cannot_unify
+
 
 let rec unify tp1 tp2 =
-  match Type.view tp1, Type.view tp2 with
-  | TUVar x, TUVar y when x == y -> ()
-  | TUVar x, _ -> unify_with_uvar x tp2
-  | _, TUVar x -> unify_with_uvar x tp1
+  let rec unify_int tpv1 tpv2 =
+    match tpv1, tpv2 with
+    | TUVar (x, None), TUVar (y, None)
+    | TGVar (x, None), TGVar (y, None) when x == y -> ()
 
-  | TUnit, TUnit -> ()
-  | TUnit, _ -> raise Cannot_unify
+    | _, TUVar (x, None) -> unify_with_uvar x tp1
+    | TUVar (x, None), _ -> unify_with_uvar x tp2
 
-  | TEmpty, TEmpty -> ()
-  | TEmpty, _ -> raise Cannot_unify
+    | _, TGVar (x, None) -> unify_with_uvar x tp1
+    | TGVar (x, None), _ -> unify_with_uvar x tp2
 
-  | TBool, TBool -> ()
-  | TBool, _ -> raise Cannot_unify
+    | TGVar (x, Some(TArrow _)), TArrow _ ->
+        unify_with_uvar x tp2
+    | TArrow _, TGVar (x, Some(TArrow _)) ->
+        unify_with_uvar x tp1
 
-  | TInt, TInt -> ()
-  | TInt, _ -> raise Cannot_unify
+    | TUVar (_, Some tp1), tp2
+    | TGVar (_, Some tp1), tp2 -> unify_int tp1 tp2
+    | tp1, TUVar (_, Some tp2)
+    | tp1, TGVar (_, Some tp2) -> unify_int tp1 tp2
 
-  | TArrow(ta1, tb1), TArrow(ta2, tb2) ->
-    unify ta1 ta2;
-    unify tb1 tb2
-  | TArrow _, _ -> raise Cannot_unify
+    | TUnit, TUnit -> ()
+    | TUnit, _ -> raise Cannot_unify
 
-  | TProd(ts1), TProd(ts2)
-  | TCoProd(ts1), TCoProd(ts2) ->
-    List.iter2 unify ts1 ts2
-  | TCoProd _, _
-  | TProd _, _ -> raise Cannot_unify
+    | TEmpty, TEmpty -> ()
+    | TEmpty, _ -> raise Cannot_unify
+
+    | TBool, TBool -> ()
+    | TBool, _ -> raise Cannot_unify
+
+    | TInt, TInt -> ()
+    | TInt, _ -> raise Cannot_unify
+
+    | TArrow(ta1, tb1), TArrow(ta2, tb2) ->
+      unify_int ta1 ta2;
+      unify tb1 tb2
+    | TArrow _, _ -> raise Cannot_unify
+
+    | TProd(ts1), TProd(ts2)
+    | TCoProd(ts1), TCoProd(ts2) ->
+      List.iter2 unify ts1 ts2
+    | TCoProd _, _
+    | TProd _, _ -> raise Cannot_unify
+  in
+  unify_int (Type.view tp1) (Type.view tp2)
 
 (* ========================================================================= *)
 (* Type inference *)
@@ -274,7 +438,7 @@ end
 let rec infer_type env (e : Ast.expr) =
   let extend_list xs env =
     let extend (tps, env) x = 
-      let new_tp = Type.fresh_uvar () in
+      let new_tp = Type.fresh_gvar () in
       new_tp :: tps, Env.extend env x new_tp
     in
     List.fold_left extend ([], env) xs
