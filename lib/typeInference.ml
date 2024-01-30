@@ -3,6 +3,26 @@
 open Core.Ast
 open Core
 
+(** Type variables *)
+module type TVar_S = sig
+  type t
+
+  val compare : t -> t -> int
+
+  val fresh : unit -> t
+end
+
+module TVar : TVar_S = struct
+  include Int
+
+  let next_fresh = ref 0
+  let fresh () =
+    let x = !next_fresh in
+    next_fresh := x + 1;
+    x
+end
+
+
 (** Internal representation of types *)
 module Type : sig
   type t
@@ -17,7 +37,7 @@ module Type : sig
     | TArrow  of view * t
     | TProd   of t list
     | TCoProd of t list
-
+  
   val fresh_uvar : unit -> t
   val fresh_gvar : unit -> t
 
@@ -36,8 +56,10 @@ module Type : sig
   val set_uvar : uvar -> t -> unit
 
   exception Cannot_compare of t * t
-  (* val compare : t -> t -> int *)
 end = struct
+
+  module UVar = TVar
+
   type t = 
     | TIUnit
     | TIEmpty
@@ -49,7 +71,7 @@ end = struct
     | TIProd   of t list
     | TICoProd of t list
 
-  and uvar = t option ref
+  and uvar = (t option * UVar.t) ref
   and view =
     | TUnit
     | TEmpty
@@ -61,9 +83,9 @@ end = struct
     | TProd   of t list
     | TCoProd of t list
 
-  let fresh_uvar () = TIUVar (ref None)
-  let fresh_gvar () = TIGVar (ref None)
-  let filled_uvar tp = TIUVar (ref (Some tp))
+  let fresh_uvar () = TIUVar (ref (None, UVar.fresh ()))
+  let fresh_gvar () = TIGVar (ref (None, UVar.fresh ()))
+  let filled_uvar tp = TIUVar (ref (Some tp, UVar.fresh ()))
 
   let t_unit  = TIUnit
   let t_empty = TIEmpty
@@ -88,20 +110,19 @@ end = struct
     | TCoProd tps -> TICoProd tps
 
   let rec view tp =
-    let shorten_path x =
+    let view_uvar x =
       match !x with
-      | None -> ()
-      | Some tp ->
+      | None, _ -> None
+      | Some tp, i ->
         let tp = view tp in
-        x := Some (t_of_view tp)
+        x := Some (t_of_view tp), i;
+        Some tp
     in
     match tp with
     | TIUVar x ->
-        shorten_path x;
-        TUVar (x, Option.map view (!x))
+        TUVar (x, view_uvar x)
     | TIGVar x ->
-        shorten_path x;
-        TGVar (x, Option.map view (!x))
+        TGVar (x, view_uvar x)
     | TIUnit -> TUnit
     | TIEmpty -> TEmpty
     | TIBool -> TBool
@@ -115,10 +136,11 @@ end = struct
 
   let rec set_uvar_int x tp general =
     match !x with
-    | None -> x := Some tp
-    | Some tp_current when general && compare tp tp_current >= 0 ->
-        x := Some tp
-    | Some _ -> assert false
+    | None, i -> x := Some tp, i
+    | Some tp_current, i when general ->
+        let res = reconstruct tp tp_current in
+        x := Some res, i
+    | Some _, i -> assert false
 
   and reconstruct (new_tp : t) (currrnet_tp : t) =
     let rec reconstruct_arrows (tpsa, resa) (tpsb, resb) =
@@ -131,24 +153,18 @@ end = struct
       | [], _ :: _ ->
           [], reconstruct resa (TIArrow (TIProd tpsb, resb))
       | _ :: _, [] ->
-          begin match view resb with
-          | TGVar _
-          | TUVar _
-          | TArrow (TProd _, _) ->
-              [], reconstruct (TIArrow (TIProd tpsa, resa)) resb
-          | _ -> raise (Cannot_compare (new_tp, currrnet_tp))
-          end
+          [], reconstruct (TIArrow (TIProd tpsa, resa)) resb
       | [], [] ->
           [], reconstruct resa resb
     in
     let uvar_map x tp fn =
       match !x with
-      | None ->
-          x := Some tp;
+      | None, i ->
+          x := Some tp, i;
           tp
-      | Some tp ->
+      | Some tp, i ->
           let res = fn tp in
-          x := Some res;
+          x := Some res, i;
           res
     in
     match new_tp, currrnet_tp with
@@ -160,7 +176,10 @@ end = struct
         uvar_map x new_tp (fun _ -> raise (Cannot_compare (new_tp, currrnet_tp)))
     | _, TIGVar x ->
         uvar_map x new_tp (fun tp -> reconstruct new_tp tp)
+
     | TIUnit, TIUnit -> TIUnit
+
+    (* Here is a good design question, does this rule make sense *)
     | _, TIUnit    -> TIUnit
 
     | TIEmpty, TIEmpty -> TIEmpty
