@@ -17,6 +17,7 @@ open Ast
 
 type def =
 | DLet of var * expr
+| DType of var * ctor_name list
 
 let make data =
   { data      = data;
@@ -41,7 +42,12 @@ let desugar_let_rec fn args body =
 let desugar_def def rest =
   match def.data with
   | DLet(x, body) ->
-    { data = ELet(x, body, rest);
+    { data      = ELet(x, body, rest);
+      start_pos = def.start_pos;
+      end_pos   = rest.end_pos
+    }
+  | DType(x, cts) ->
+    { data      = EType(x, cts, rest);
       start_pos = def.start_pos;
       end_pos   = rest.end_pos
     }
@@ -142,10 +148,16 @@ clauses
       end_pos   = end_pos } }
 ;
 
+types
+: LID             { [ $1 ]   }
+| LID BAR types   { $1 :: $3 }
+;
+
 def
 : KW_LET LID EQ expr                 { make (DLet($2, $4))      }
 | KW_LET LID id_list1 EQ expr        { desugar_let_fun $2 $3 $5 }
 | KW_LET KW_REC LID id_list1 EQ expr { desugar_let_rec $3 $4 $6 }
+| KW_TYPE LID EQ bar_opt types       { make (DType ($2, $5))    }
 ;
 
 def_list1

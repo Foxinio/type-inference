@@ -22,6 +22,41 @@ module TVar : TVar_S = struct
     x
 end
 
+(* module Ast = struct *)
+(*   type 'a node = { *)
+(*     data      : 'a; *)
+(*     start_pos : Lexing.position; *)
+(*     end_pos   : Lexing.position *)
+(*   } *)
+(*   type var       = string *)
+(*   type ctor_name = string *)
+(*   type expr = expr_data node *)
+(*   and expr_data = *)
+(*     | EUnit *)
+(*     | EBool   of bool *)
+(*     | ENum    of int *)
+(*     | EVar    of var *)
+(*     | EFn     of var list * expr *)
+(*     | EFix    of var * var list * expr *)
+(*     | EApp    of expr * expr list *)
+(*     | ELet    of var * expr * expr *)
+(*     | EPair   of expr * expr *)
+(*     | EFst    of expr *)
+(*     | ESnd    of expr *)
+(*     | EInl    of expr *)
+(*     | EInr    of expr *)
+(*     | ECase   of expr * clause * clause *)
+(*     | EIf     of expr * expr * expr *)
+(*     | ESeq    of expr * expr *)
+(*     | EAbsurd of expr *)
+(*     | EType   of var * ctor_name list * expr *)
+(*     | ECtor   of ctor_name * expr *)
+(*     | EMatch  of expr * ctor_name * clause * clause *)
+(*     | EMatchEmpty of expr (* Pattern matching of an empty variant *) *)
+(*   and clause = var * expr *)
+(*   type program = expr *)
+(* end *)
+
 (** Internal representation of types *)
 module Type : sig
 
@@ -34,14 +69,15 @@ module Type : sig
     | TEmpty
     | TBool
     | TInt
+    | TVar    of Ast.var
     | TGVar   of uvar * view option
     | TUVar   of uvar * view option
     | TArrow  of view * t
     | TProd   of t list
     | TCoProd of t list
 
-  (* set for uvars *)
   module UVarSet : Set.S with type elt = uvar
+  module UVarMap : Map.S with type key = uvar
 
   val fresh_uvar : unit -> t
   val fresh_gvar : unit -> t
@@ -50,6 +86,7 @@ module Type : sig
   val t_empty  : t
   val t_bool   : t
   val t_int    : t
+  val t_var    : Ast.var -> t
   val t_arrow  : t list -> t -> t
   val t_pair   : t -> t -> t
   val t_copair : t -> t -> t
@@ -83,6 +120,7 @@ end = struct
     | TIEmpty
     | TIBool
     | TIInt
+    | TIVar    of Ast.var
     | TIGVar   of uvar
     | TIUVar   of uvar
     | TIArrow  of t * t
@@ -95,6 +133,7 @@ end = struct
     | TEmpty
     | TBool
     | TInt
+    | TVar    of Ast.var
     | TGVar   of uvar * view option
     | TUVar   of uvar * view option
     | TArrow  of view * t
@@ -108,6 +147,7 @@ end = struct
   let t_empty = TIEmpty
   let t_bool  = TIBool
   let t_int   = TIInt
+  let t_var x = TIVar x
   let t_arrow  tps tp2 = TIArrow(TIProd(tps), tp2)
   let t_pair   tp1 tp2 = TIProd([tp1; tp2])
   let t_copair tp1 tp2 = TICoProd([tp1; tp2])
@@ -117,6 +157,7 @@ end = struct
   let rec t_of_view = function
     | TUVar (x, _) -> TIUVar x
     | TGVar (x, _) -> TIGVar x
+    | TVar x -> TIVar x
     | TUnit -> TIUnit
     | TEmpty -> TIEmpty
     | TBool -> TIBool
@@ -139,6 +180,7 @@ end = struct
         TUVar (x, view_uvar x)
     | TIGVar x ->
         TGVar (x, view_uvar x)
+    | TIVar x -> TVar x
     | TIUnit -> TUnit
     | TIEmpty -> TEmpty
     | TIBool -> TBool
@@ -232,6 +274,12 @@ end = struct
     let compare = uvar_compare
   end)
 
+  module UVarMap = Map.Make(struct
+    type t = uvar
+    let compare = uvar_compare
+  end)
+
+
 
   type typ =
     | Mono of t
@@ -243,17 +291,15 @@ end = struct
   let instantiate = function
     | Mono tp -> tp
     | Schema (tp, uvars) ->
-        let module M =
-          Map.Make(struct type t = UVar.t;; let compare = UVar.compare end) in
         let uvars_seq =
           UVarSet.to_seq uvars |>
-          Seq.flat_map (fun { contents=_,i } -> Seq.return (i, fresh_uvar ())) in
-        let mapper = M.add_seq uvars_seq M.empty in
+          Seq.flat_map (fun x -> Seq.return (x, fresh_uvar ())) in
+        let mapper = UVarMap.of_seq uvars_seq in
         let rec instantiate = function
-          | TIUVar ({ contents=_,i } as x) ->
-              M.find_opt i mapper |> Option.value ~default:(TIUVar x)
-          | TIGVar ({ contents=_,i } as x) ->
-              M.find_opt i mapper |> Option.value ~default:(TIGVar x)
+          | TIUVar (x) ->
+              UVarMap.find_opt x mapper |> Option.value ~default:(TIUVar x)
+          | TIGVar (x) ->
+              UVarMap.find_opt x mapper |> Option.value ~default:(TIGVar x)
           | TIArrow (tp1, tp2) ->
               let tp1 = instantiate tp1 in
               let tp2 = instantiate tp2 in
@@ -278,7 +324,7 @@ end = struct
      *)
     let rec helper set t =
       match view t with
-      | TUnit | TEmpty | TBool | TInt -> UVarSet.empty
+      | TUnit | TEmpty | TBool | TInt | TVar _ -> UVarSet.empty
       | TGVar (x, None)
       | TUVar (x, None)
           when UVarSet.find_opt x set |> Option.is_none -> UVarSet.singleton x
@@ -297,7 +343,6 @@ end = struct
         helper uvars tp
 
 
-
 end
 open Type
 
@@ -314,6 +359,7 @@ let pp_at_level l lvl str =
 
 let rec pp_type ctx lvl tp =
   let rec matcher lvl = function
+    | TVar x -> "rec_x"
     | TUnit  -> "Unit"
     | TEmpty -> "Empty"
     | TBool  -> "Bool"
@@ -369,7 +415,7 @@ let rec contains_uvar x tp =
     | TUVar (y, None) -> x == y
     | TUVar (_, Some tp)
     | TGVar (_, Some tp) -> contains_uvar_int tp
-    | TUnit | TEmpty | TBool | TInt | TGVar (_, None) -> false
+    | TUnit | TEmpty | TBool | TInt | TGVar (_, None) | TVar _ -> false
     | TArrow(tp1, tp2) ->
       contains_uvar_int tp1 || contains_uvar x tp2
     | TProd(tps) | TCoProd(tps) ->
@@ -407,6 +453,9 @@ let rec unify tp1 tp2 =
     | tp1, TUVar (_, Some tp2)
     | tp1, TGVar (_, Some tp2) -> unify_int tp1 tp2
 
+    | TVar x, TVar y when x = y -> ()
+    | TVar _, _ -> raise Cannot_unify
+
     | TUnit, TUnit -> ()
     | TUnit, _ -> raise Cannot_unify
 
@@ -442,27 +491,38 @@ module Env : sig
 
   val empty : t
 
-  val extend : t -> Ast.var -> Type.typ -> t
+  val extend_gamma : t -> Ast.var -> Type.typ -> t
+  val lookup_gamma : t -> Ast.var -> Type.typ option
 
-  val lookup : t -> Ast.var -> Type.typ option
+  val extend_delta : t -> Ast.ctor_name list -> Ast.var -> t
+  val lookup_delta : t -> Ast.ctor_name -> Ast.var option
 
   val get_uvars : t -> UVarSet.t
 end = struct
   module VarMap = Map.Make(String)
 
-  type t = Type.typ VarMap.t * UVarSet.t
+  type t = Type.typ VarMap.t * UVarSet.t * Ast.var VarMap.t
 
-  let empty = VarMap.empty, UVarSet.empty
+  let empty = VarMap.empty, UVarSet.empty, VarMap.empty
 
-  let extend (env, lst) x tp =
-    VarMap.add x tp env,
-    UVarSet.union lst (Type.get_uvars tp)
+  let extend_gamma (envG, lst, envD) x tp =
+    VarMap.add x tp envG,
+    UVarSet.union lst (Type.get_uvars tp),
+    envD
 
-  let lookup (env,_) x = VarMap.find_opt x env
+  let lookup_gamma (envG,_,_) x = VarMap.find_opt x envG
 
-  let get_uvars (_, lst) =
+  let get_uvars (_, lst,_) =
     (* this filter is not nessesary but may be more optimal *)
     UVarSet.filter Type.uvar_empty lst
+
+
+  let extend_delta (envG, lst, envD) ctor_lst x =
+    envG, lst,
+    VarMap.add_seq (List.to_seq ctor_lst |>
+                    Seq.flat_map (fun ctor -> Seq.return (ctor, x)))
+                   envD
+  let lookup_delta (_, _, envD) ctor = VarMap.find_opt ctor envD
 end
 
 let generalize tp env =
@@ -477,7 +537,7 @@ let rec infer_type env (e : Ast.expr) =
   let extend_list xs env =
     let extend (tps, env) x =
       let new_tp = Type.fresh_gvar () in
-      new_tp :: tps, Env.extend env x (Type.typ_mono new_tp)
+      new_tp :: tps, Env.extend_gamma env x (Type.typ_mono new_tp)
     in
     List.fold_left extend ([], env) xs
   in
@@ -486,7 +546,7 @@ let rec infer_type env (e : Ast.expr) =
   | EBool _ -> Type.t_bool
   | ENum  _ -> Type.t_int
   | EVar  x ->
-    begin match Env.lookup env x with
+    begin match Env.lookup_gamma env x with
     | Some tp -> Type.instantiate tp
     | None ->
       Utils.report_error e "Unbound variable %s" x
@@ -499,7 +559,7 @@ let rec infer_type env (e : Ast.expr) =
     let tps, env = extend_list xs env in
     let tp2 = Type.fresh_uvar () in
     let f_tp = Type.t_arrow tps tp2 in
-    check_type (Env.extend env f (Type.typ_mono f_tp)) body tp2;
+    check_type (Env.extend_gamma env f (Type.typ_mono f_tp)) body tp2;
     f_tp
   | EApp(e1, es) ->
     let generate _ = Type.fresh_uvar () in
@@ -511,7 +571,7 @@ let rec infer_type env (e : Ast.expr) =
   | ELet(x, e1, e2) ->
     let tp = infer_type env e1 in
     let tp = generalize tp env in
-    infer_type (Env.extend env x tp) e2
+    infer_type (Env.extend_gamma env x tp) e2
   | EPair(e1, e2) ->
     let tp1 = infer_type env e1 in
     let tp2 = infer_type env e2 in
@@ -539,8 +599,8 @@ let rec infer_type env (e : Ast.expr) =
     let tp2 = Type.fresh_uvar () in
     let tp = Type.fresh_uvar () in
     check_type env e (Type.t_copair tp1 tp2);
-    check_type (Env.extend env x1 (Type.typ_mono tp1)) e1 tp;
-    check_type (Env.extend env x2 (Type.typ_mono tp2)) e2 tp;
+    check_type (Env.extend_gamma env x1 (Type.typ_mono tp1)) e1 tp;
+    check_type (Env.extend_gamma env x2 (Type.typ_mono tp2)) e2 tp;
     tp
   | EIf(e1, e2, e3) ->
     check_type env e1 Type.t_bool;
@@ -554,7 +614,7 @@ let rec infer_type env (e : Ast.expr) =
     check_type env e Type.t_empty;
     Type.fresh_uvar ()
   (* | ESelect _ | ERecord _  *)
-  | ECtor _ | EMatch _ | EMatchEmpty _ ->
+  | EType _ | ECtor _ | EMatch _ | EMatchEmpty _ ->
     (* TODO: not implemented *)
     Utils.report_error e "This language feature is not supported yet!"
 

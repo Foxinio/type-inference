@@ -36,9 +36,12 @@ and expr_data =
   | EIf     of expr * expr * expr
   | ESeq    of expr * expr
   | EAbsurd of expr
+  | EType   of var * ctor_name list * expr
+  (* ECtor is equivalent to EFold *)
   | ECtor   of ctor_name * expr
   (* EMatch(e, c, (x1, e1), (x2, e2)) stands
     for (match e with c x1 => e1 | x2 => e2 end) *)
+  (* EMatch is equivalent to EUnfold *)
   | EMatch  of expr * ctor_name * clause * clause
   | EMatchEmpty of expr (* Pattern matching of an empty variant *)
 
