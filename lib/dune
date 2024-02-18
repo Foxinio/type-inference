@@ -5,9 +5,9 @@
 
 (env
     (dev
-        (flags (:standard -g -w -39-33-26-27-32-21-66))
+        (flags (:standard -g -w -39-33-26-27-32-21-66-50-69))
     )
     (release
-        (flags (:standard -w -39-33-26-27))
+        (flags (:standard -w -39-33-26-27-50))
     )
 )

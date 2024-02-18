@@ -3,59 +3,8 @@
 open Core.Ast
 open Core
 
-(** Type variables *)
-module type TVar_S = sig
-  type t
-
-  val compare : t -> t -> int
-
-  val fresh : unit -> t
-end
-
-module TVar : TVar_S = struct
-  include Int
-
-  let next_fresh = ref 0
-  let fresh () =
-    let x = !next_fresh in
-    next_fresh := x + 1;
-    x
-end
-
-(* module Ast = struct *)
-(*   type 'a node = { *)
-(*     data      : 'a; *)
-(*     start_pos : Lexing.position; *)
-(*     end_pos   : Lexing.position *)
-(*   } *)
-(*   type var       = string *)
-(*   type ctor_name = string *)
-(*   type expr = expr_data node *)
-(*   and expr_data = *)
-(*     | EUnit *)
-(*     | EBool   of bool *)
-(*     | ENum    of int *)
-(*     | EVar    of var *)
-(*     | EFn     of var list * expr *)
-(*     | EFix    of var * var list * expr *)
-(*     | EApp    of expr * expr list *)
-(*     | ELet    of var * expr * expr *)
-(*     | EPair   of expr * expr *)
-(*     | EFst    of expr *)
-(*     | ESnd    of expr *)
-(*     | EInl    of expr *)
-(*     | EInr    of expr *)
-(*     | ECase   of expr * clause * clause *)
-(*     | EIf     of expr * expr * expr *)
-(*     | ESeq    of expr * expr *)
-(*     | EAbsurd of expr *)
-(*     | EType   of var * ctor_name list * expr *)
-(*     | ECtor   of ctor_name * expr *)
-(*     | EMatch  of expr * ctor_name * clause * clause *)
-(*     | EMatchEmpty of expr (* Pattern matching of an empty variant *) *)
-(*   and clause = var * expr *)
-(*   type program = expr *)
-(* end *)
+module TVar = Tvar.Make()
+module type TVar_S = Tvar.TVar_S
 
 (** Internal representation of types *)
 module Type : sig
@@ -69,10 +18,10 @@ module Type : sig
     | TEmpty
     | TBool
     | TInt
-    | TVar    of Ast.var
+    | TVar    of t Ast.var
     | TGVar   of uvar * view option
-    | TUVar   of uvar * view option
-    | TArrow  of view * t
+    | TUVar   of uvar
+    | TArrow  of t list * t
     | TProd   of t list
     | TCoProd of t list
 
@@ -86,7 +35,7 @@ module Type : sig
   val t_empty  : t
   val t_bool   : t
   val t_int    : t
-  val t_var    : Ast.var -> t
+  val t_var    : t Ast.var -> t
   val t_arrow  : t list -> t -> t
   val t_pair   : t -> t -> t
   val t_copair : t -> t -> t
@@ -97,7 +46,7 @@ module Type : sig
 
   val set_uvar : uvar -> t -> unit
   val set_gvar : uvar -> t -> unit
-  val uvar_empty : uvar -> bool
+  val t_of_uvar : uvar -> t option
   val uvar_compare : uvar -> uvar -> int
 
   exception Cannot_compare of t * t
@@ -108,6 +57,7 @@ module Type : sig
   val instantiate : typ -> t
   val typ_mono : t -> typ
   val typ_schema : t -> UVarSet.t -> typ
+  val generalize : UVarSet.t -> t -> typ
 
   val get_uvars : typ -> UVarSet.t
 
@@ -120,10 +70,10 @@ end = struct
     | TIEmpty
     | TIBool
     | TIInt
-    | TIVar    of Ast.var
+    | TIVar    of t Ast.var
     | TIGVar   of uvar
     | TIUVar   of uvar
-    | TIArrow  of t * t
+    | TIArrow  of t list * t
     | TIProd   of t list
     | TICoProd of t list
 
@@ -133,10 +83,10 @@ end = struct
     | TEmpty
     | TBool
     | TInt
-    | TVar    of Ast.var
+    | TVar    of t Ast.var
     | TGVar   of uvar * view option
-    | TUVar   of uvar * view option
-    | TArrow  of view * t
+    | TUVar   of uvar
+    | TArrow  of t list * t
     | TProd   of t list
     | TCoProd of t list
 
@@ -148,21 +98,21 @@ end = struct
   let t_bool  = TIBool
   let t_int   = TIInt
   let t_var x = TIVar x
-  let t_arrow  tps tp2 = TIArrow(TIProd(tps), tp2)
+  let t_arrow  tps tp2 = TIArrow(tps, tp2)
   let t_pair   tp1 tp2 = TIProd([tp1; tp2])
   let t_copair tp1 tp2 = TICoProd([tp1; tp2])
   let t_prod   tps = TIProd(tps)
   let t_coprod tps = TICoProd(tps)
 
   let rec t_of_view = function
-    | TUVar (x, _) -> TIUVar x
+    | TUVar x -> TIUVar x
     | TGVar (x, _) -> TIGVar x
     | TVar x -> TIVar x
     | TUnit -> TIUnit
     | TEmpty -> TIEmpty
     | TBool -> TIBool
     | TInt -> TIInt
-    | TArrow(tp1, tp2) -> TIArrow(t_of_view tp1, tp2)
+    | TArrow(tps, tp2) -> TIArrow(tps, tp2)
     | TProd tps -> TIProd tps
     | TCoProd tps -> TICoProd tps
 
@@ -176,8 +126,10 @@ end = struct
         Some tp
     in
     match tp with
-    | TIUVar x ->
-        TUVar (x, view_uvar x)
+    | TIUVar ({contents=Some(_),_} as x) ->
+        Option.get (view_uvar x)
+    | TIUVar ({contents=None,_} as x) ->
+        TUVar x
     | TIGVar x ->
         TGVar (x, view_uvar x)
     | TIVar x -> TVar x
@@ -185,7 +137,7 @@ end = struct
     | TIEmpty -> TEmpty
     | TIBool -> TBool
     | TIInt -> TInt
-    | TIArrow(tp1, tp2) -> TArrow(view tp1, tp2)
+    | TIArrow(tps, tp2) -> TArrow(tps, tp2)
     | TIProd tps -> TProd tps
     | TICoProd tps -> TCoProd tps
 
@@ -209,9 +161,9 @@ end = struct
           let rest, res = reconstruct_arrows (tpsa, resa) (tpsb, resb) in
           tp :: rest, res
       | [], _ :: _ ->
-          [], reconstruct resa (TIArrow (TIProd tpsb, resb))
+          [], reconstruct resa (TIArrow (tpsb, resb))
       | _ :: _, [] ->
-          [], reconstruct (TIArrow (TIProd tpsa, resa)) resb
+          [], reconstruct (TIArrow (tpsa, resa)) resb
       | [], [] ->
           [], reconstruct resa resb
     in
@@ -246,15 +198,11 @@ end = struct
     | TIBool, TIBool -> TIBool
     | TIInt, TIInt -> TIInt
 
-    | TIArrow (TIProd tpsa, tp_resa),
-      TIArrow (TIProd tpsb, tp_resb) ->
+    | TIArrow (tpsa, tp_resa),
+      TIArrow (tpsb, tp_resb) ->
         let args, res = reconstruct_arrows (tpsa, tp_resa) (tpsb, tp_resb) in
         t_arrow args res
 
-    | TIArrow(ta1, tb1), TIArrow(ta2, tb2) ->
-        let res1 = reconstruct ta2 ta1 in
-        let res2 = reconstruct tb1 tb2 in
-        TIArrow(res1, res2)
     | TIProd(ts1), TIProd(ts2) when List.length ts1 = List.length ts2 ->
       TIProd (List.map2 reconstruct ts1 ts2)
     | TICoProd(ts1), TICoProd(ts2) when List.length ts1 = List.length ts2 ->
@@ -266,7 +214,7 @@ end = struct
     set_uvar_int x tp false
   let set_gvar x tp =
     set_uvar_int x tp true
-  let uvar_empty { contents=x,_ } = Option.is_none x
+  let t_of_uvar { contents=x,_ } = x
   let uvar_compare { contents=_,x } { contents=_,y } = UVar.compare x y
 
   module UVarSet = Set.Make(struct
@@ -300,8 +248,8 @@ end = struct
               UVarMap.find_opt x mapper |> Option.value ~default:(TIUVar x)
           | TIGVar (x) ->
               UVarMap.find_opt x mapper |> Option.value ~default:(TIGVar x)
-          | TIArrow (tp1, tp2) ->
-              let tp1 = instantiate tp1 in
+          | TIArrow (tps, tp2) ->
+              let tp1 = List.map instantiate tps in
               let tp2 = instantiate tp2 in
               TIArrow (tp1, tp2)
           | TIProd tps ->
@@ -311,36 +259,38 @@ end = struct
           | tp -> tp
         in instantiate tp
 
-  let get_uvars t =
+  let rec get_uvars_of_t set t =
+    (* also this needs to be tested if its more effitient to build up set
+     * by constantly creating new ones and merging them,
+     * or create one list and turn it into set after everything *)
+    let fold_fun acc tp = get_uvars_of_t set tp |> UVarSet.union acc in
+    match view t with
+    | TGVar (x, None)
+    | TUVar (x)
+        when UVarSet.find_opt x set |> Option.is_none -> UVarSet.singleton x
+    | TUnit | TEmpty | TBool | TInt | TVar _ | TGVar (_, None) | TUVar _ -> UVarSet.empty
+    | TGVar (_, Some tp) -> get_uvars_of_t set (t_of_view tp)
+    | TArrow (tps, tp2) -> UVarSet.union (List.fold_left fold_fun UVarSet.empty tps) (get_uvars_of_t set tp2)
+    | TProd tps
+    | TCoProd tps ->
+        List.fold_left fold_fun UVarSet.empty tps
+
     (* so im not sure what to do here whether or not
      * uvars representing polymorphic variables should be returned as part of uvarset
      * because on the one hand they are not really free uvars in this type
      * because they are not considered uvars anymore
      * on the other hand because of how they are chosen they shouldn't be visible from outsite
-     * and also if given they would only be subtracted so this wouldn't break anything.
-     *)
-    (* also this needs to be tested if its more effitient to build up set
-     * by constantly creating new ones and merging them, or create one list and turn it into set after everything
-     *)
-    let rec helper set t =
-      match view t with
-      | TUnit | TEmpty | TBool | TInt | TVar _ -> UVarSet.empty
-      | TGVar (x, None)
-      | TUVar (x, None)
-          when UVarSet.find_opt x set |> Option.is_none -> UVarSet.singleton x
-      | TGVar (_, None)
-      | TUVar (_, None) -> UVarSet.empty
-      | TGVar (_, Some tp)
-      | TUVar (_, Some tp) -> helper set (t_of_view tp)
-      | TArrow (tp1, tp2) -> UVarSet.union (helper set (t_of_view tp1)) (helper set tp2)
-      | TProd tps
-      | TCoProd tps ->
-          List.fold_left (fun acc tp -> helper set tp |> UVarSet.union acc) UVarSet.empty tps
-    in
+     * and also if given they would only be subtracted so this wouldn't break anything. *)
+  let get_uvars t =
     match t with
-    | Mono t -> helper UVarSet.empty t
+    | Mono t -> get_uvars_of_t UVarSet.empty t
     | Schema (tp, uvars) ->
-        helper uvars tp
+        get_uvars_of_t uvars tp
+
+  let generalize env_uvars tp =
+    let tp_uvars  = get_uvars_of_t UVarSet.empty tp in
+    let diff = UVarSet.diff tp_uvars env_uvars in
+    typ_schema tp diff
 
 
 end
@@ -364,7 +314,7 @@ let rec pp_type ctx lvl tp =
     | TEmpty -> "Empty"
     | TBool  -> "Bool"
     | TInt   -> "Int"
-    | TUVar (x, None) ->
+    | TUVar x ->
       begin match List.assq_opt x !ctx with
       | Some str -> str
       | None ->
@@ -372,8 +322,6 @@ let rec pp_type ctx lvl tp =
         ctx := (x, name) :: !ctx;
         name
       end
-    | TUVar (x, Some tp) ->
-        matcher lvl tp
     | TGVar (x, None) ->
       begin match List.assq_opt x !ctx with
       | Some str -> str
@@ -384,9 +332,9 @@ let rec pp_type ctx lvl tp =
       end
     | TGVar (x, Some tp) ->
         matcher lvl tp
-    | TArrow(tp1, tp2) ->
+    | TArrow(tps, tp2) ->
       pp_at_level 0 lvl
-        (Printf.sprintf "%s -> %s" (matcher 1 tp1) (pp_type ctx 0 tp2))
+        (Printf.sprintf "%s -> %s" (pp_list "," ctx 1 tps) (pp_type ctx 0 tp2))
     | TProd(tps) ->
       pp_at_level 2 lvl
         (Printf.sprintf "%s" (pp_list "*" ctx 3 tps))
@@ -412,12 +360,11 @@ let rec contains_uvar x tp =
     | [] -> false
     | tp :: tps -> contains_uvar x tp || list_contains_uvar tps
   and contains_uvar_int = function
-    | TUVar (y, None) -> x == y
-    | TUVar (_, Some tp)
+    | TUVar (y) -> x == y
     | TGVar (_, Some tp) -> contains_uvar_int tp
     | TUnit | TEmpty | TBool | TInt | TGVar (_, None) | TVar _ -> false
     | TArrow(tp1, tp2) ->
-      contains_uvar_int tp1 || contains_uvar x tp2
+      list_contains_uvar tp1 || contains_uvar x tp2
     | TProd(tps) | TCoProd(tps) ->
       list_contains_uvar tps
   in Type.view tp |> contains_uvar_int
@@ -434,11 +381,11 @@ let unify_with_uvar x tp =
 let rec unify tp1 tp2 =
   let rec unify_int tpv1 tpv2 =
     match tpv1, tpv2 with
-    | TUVar (x, None), TUVar (y, None)
+    | TUVar (x), TUVar (y)
     | TGVar (x, None), TGVar (y, None) when x == y -> ()
 
-    | _, TUVar (x, None) -> unify_with_uvar x tp1
-    | TUVar (x, None), _ -> unify_with_uvar x tp2
+    | _, TUVar (x) -> unify_with_uvar x tp1
+    | TUVar (x), _ -> unify_with_uvar x tp2
 
     | _, TGVar (x, None) -> unify_with_uvar x tp1
     | TGVar (x, None), _ -> unify_with_uvar x tp2
@@ -448,9 +395,7 @@ let rec unify tp1 tp2 =
     | TArrow _, TGVar (x, Some(TArrow _)) ->
         unify_with_uvar x tp1
 
-    | TUVar (_, Some tp1), tp2
     | TGVar (_, Some tp1), tp2 -> unify_int tp1 tp2
-    | tp1, TUVar (_, Some tp2)
     | tp1, TGVar (_, Some tp2) -> unify_int tp1 tp2
 
     | TVar x, TVar y when x = y -> ()
@@ -469,7 +414,7 @@ let rec unify tp1 tp2 =
     | TInt, _ -> raise Cannot_unify
 
     | TArrow(ta1, tb1), TArrow(ta2, tb2) ->
-      unify_int ta1 ta2;
+      List.iter2 unify ta1 ta2;
       unify tb1 tb2
     | TArrow _, _ -> raise Cannot_unify
 
@@ -488,52 +433,60 @@ let rec unify tp1 tp2 =
 (** Typing environments *)
 module Env : sig
   type t
+  module VarMap : Map.S with type key = string
 
+  (** this is gonna be removed but is kept for now to make it compile *)
   val empty : t
+  val of_var_names : Type.t Ast.var VarMap.t -> t
 
-  val extend_gamma : t -> Ast.var -> Type.typ -> t
-  val lookup_gamma : t -> Ast.var -> Type.typ option
+  val extend_gamma : t -> Type.t Ast.var -> Type.typ -> t
+  val lookup_gamma : t -> Type.t Ast.var -> Type.typ option
 
-  val extend_delta : t -> Ast.ctor_name list -> Ast.var -> t
-  val lookup_delta : t -> Ast.ctor_name -> Ast.var option
+  val extend_delta : t -> Ast.ctor_name list -> Type.t Ast.var -> t
+  val lookup_delta : t -> Ast.ctor_name -> Type.t Ast.var option
 
   val get_uvars : t -> UVarSet.t
 end = struct
   module VarMap = Map.Make(String)
 
-  type t = Type.typ VarMap.t * UVarSet.t * Ast.var VarMap.t
+  type t = {
+    gamma: Type.typ VarMap.t;
+    delta: Type.t Ast.var VarMap.t;
+    var_name: Type.t Ast.var VarMap.t
+  }
 
-  let empty = VarMap.empty, UVarSet.empty, VarMap.empty
+  let empty = {
+    gamma=VarMap.empty;
+    delta=VarMap.empty;
+    var_name=VarMap.empty
+  }
+  let of_var_names var_name =
+    { empty with var_name }
 
-  let extend_gamma (envG, lst, envD) x tp =
-    VarMap.add x tp envG,
-    UVarSet.union lst (Type.get_uvars tp),
-    envD
+  let extend_gamma ({ gamma;  _} as env) (x,_) tp =
+    { env with
+      gamma=VarMap.add x tp gamma;
+    }
 
-  let lookup_gamma (envG,_,_) x = VarMap.find_opt x envG
+  let lookup_gamma {gamma;_} (x,_) =
+    VarMap.find_opt x gamma
 
-  let get_uvars (_, lst,_) =
-    (* this filter is not nessesary but may be more optimal *)
-    UVarSet.filter Type.uvar_empty lst
+  let get_uvars {gamma;_} =
+    VarMap.fold (fun _name typ acc ->
+      Type.get_uvars typ |> UVarSet.union acc) gamma UVarSet.empty
 
 
-  let extend_delta (envG, lst, envD) ctor_lst x =
-    envG, lst,
-    VarMap.add_seq (List.to_seq ctor_lst |>
-                    Seq.flat_map (fun ctor -> Seq.return (ctor, x)))
-                   envD
-  let lookup_delta (_, _, envD) ctor = VarMap.find_opt ctor envD
+  let extend_delta ({delta;_} as env) ctor_lst x =
+    { env with delta =
+      VarMap.add_seq
+        (List.to_seq ctor_lst |> Seq.flat_map (fun ctor -> Seq.return (ctor, x)))
+        delta
+    }
+
+  let lookup_delta {delta;_} ctor = VarMap.find_opt ctor delta
 end
 
-let generalize tp env =
-  (* maybe most of this function should go into implementation of typ_schema *)
-  let tp_uvars = Type.get_uvars (Type.typ_mono tp) in
-  let env_uvars = Env.get_uvars env in
-  let diff = UVarSet.diff tp_uvars env_uvars in
-  Type.typ_schema tp diff
-
-
-let rec infer_type env (e : Ast.expr) =
+let rec infer_type env (e : Type.t Ast.expr) =
   let extend_list xs env =
     let extend (tps, env) x =
       let new_tp = Type.fresh_gvar () in
@@ -545,11 +498,11 @@ let rec infer_type env (e : Ast.expr) =
   | EUnit   -> Type.t_unit
   | EBool _ -> Type.t_bool
   | ENum  _ -> Type.t_int
-  | EVar  x ->
+  | EVar  ((name,_) as x) ->
     begin match Env.lookup_gamma env x with
     | Some tp -> Type.instantiate tp
     | None ->
-      Utils.report_error e "Unbound variable %s" x
+      Utils.report_error e "Unbound variable %s" name
     end
   | EFn(xs, body) ->
     let tps, env = extend_list xs env in
@@ -570,7 +523,7 @@ let rec infer_type env (e : Ast.expr) =
     tp1
   | ELet(x, e1, e2) ->
     let tp = infer_type env e1 in
-    let tp = generalize tp env in
+    let tp = Type.generalize (Env.get_uvars env) tp in
     infer_type (Env.extend_gamma env x tp) e2
   | EPair(e1, e2) ->
     let tp1 = infer_type env e1 in
@@ -614,11 +567,11 @@ let rec infer_type env (e : Ast.expr) =
     check_type env e Type.t_empty;
     Type.fresh_uvar ()
   (* | ESelect _ | ERecord _  *)
-  | EType _ | ECtor _ | EMatch _ | EMatchEmpty _ ->
+  | EType _ | ECtor _ | EMatch _ ->
     (* TODO: not implemented *)
     Utils.report_error e "This language feature is not supported yet!"
 
-and check_type env (e : Ast.expr) tp =
+and check_type env (e : Type.t Ast.expr) tp =
   let tp' = infer_type env e in
   try
     unify tp tp'

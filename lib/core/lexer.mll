@@ -29,6 +29,9 @@ let kw_map =
   ; "with",   KW_WITH
   ; "type",   KW_TYPE
   ; "begin",  KW_BEGIN
+  ; "bool",   TYP_KW_BOOL
+  ; "int",    TYP_KW_INT
+  ; "unit",   TYP_KW_UNIT
   ] |> List.to_seq |> Hashtbl.of_seq
 
 let tokenize_ident str =
@@ -65,6 +68,9 @@ rule token = parse
   | "."  { YaccParser.DOT       }
   | "="  { YaccParser.EQ        }
   | ";"  { YaccParser.SEMICOLON }
+  | "+"  { YaccParser.TYP_PLUS  }
+  | "*"  { YaccParser.TYP_STAR  }
+  | ":"  { YaccParser.TYP_COLON }
   | lvar_start var_char* as x { tokenize_ident x }
   | uvar_start var_char* as x { YaccParser.UID x }
   | digit var_char*      as x { tokenize_number lexbuf x }

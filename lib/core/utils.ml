@@ -33,5 +33,5 @@ let report_error_pp start_p end_p fmt =
     (string_of_pp start_p end_p)
 
 (** report an error related to given AST node, and raise Fatal_error *)
-let report_error (node : 'a Ast.node) fmt =
+let report_error (node : ('a,'b) Ast.node) fmt =
   report_error_pp node.start_pos node.end_pos fmt

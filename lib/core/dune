@@ -1,6 +1,5 @@
 (library
- (name core)
- (modules parser utils ast yaccParser lexer))
+ (name core))
 
 (env
     (dev

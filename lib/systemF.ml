@@ -1,26 +1,9 @@
 (** System F with row polymorphism *)
-
-(** Type variables *)
-module type TVar_S = sig
-  type t
-
-  val compare : t -> t -> int
-
-  val fresh : unit -> t
-end
-
-module TVar : TVar_S = struct
-  include Int
-
-  let next_fresh = ref 0
-  let fresh () =
-    let x = !next_fresh in
-    next_fresh := x + 1;
-    x
-end
-
 (** Row variables *)
-module RVar : TVar_S = TVar
+open Core
+
+module TVar = Tvar.Make()
+module RVar = Tvar.Make()
 
 type tvar = TVar.t
 type rvar = RVar.t
