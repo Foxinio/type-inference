@@ -1,5 +1,6 @@
 /** Yacc-generated parser */
-%token<string> LID UID
+%token<string> LID UID AID 
+/** AID - apostrophe ids */
 %token<int> NUM
 %token BR_OPN BR_CLS CBR_OPN CBR_CLS
 %token TYP_STAR TYP_PLUS TYP_COLON
@@ -14,12 +15,12 @@
 %start file
 
 %{
-
 open Ast
 
-type def =
-| DLet of var * expr
-| DType of var * var list
+type 'typ def =
+| DLet of 'typ var * 'typ expr
+| DType of scheme * (ctor_name * 'typ) list
+| DTypeAlias of scheme * 'typ
 
 let make data =
   { data      = data;
@@ -39,23 +40,23 @@ let extract args typ =
     | {typ=None; _}   -> THole
   in
   let extracted_typ = List.map extract_typ args in
-  let typ = extract_typ typ in
+  let typ = Option.value ~default:(THole) typ in
   (List.map extract_ids args,
-   if !found then Some(TArrow(extract_typ, typ)) else None)
+   if !found then Some(TArrow(extracted_typ, typ)) else None)
 
 let desugar_fn args body typ =
-  let args, typ = extract args typ
+  let args, typ = extract args typ in
   { (make (EFn(args, body))) with typ }
 
 let desugar_fix fn args body typ =
-  let args, typ = extract args typ
+  let args, typ = extract args typ in
   { (make (EFix(fn, args, body))) with typ }
 
-let desugar_let_fun fn args body =
-  make (DLet(fn, desugar_fn args body))
+let desugar_let_fun fn args body typ =
+  make (DLet(fn, desugar_fn args body typ))
 
-let desugar_let_rec fn args body =
-  make (DLet(fn, desugar_fix fn args body))
+let desugar_let_rec fn args body typ =
+  make (DLet(fn, desugar_fix fn args body typ))
 
 let desugar_def def rest =
   match def.data with
@@ -67,6 +68,12 @@ let desugar_def def rest =
     }
   | DType(x, cts) ->
     { data      = EType(x, cts, rest);
+      typ       = None;
+      start_pos = def.start_pos;
+      end_pos   = rest.end_pos
+    }
+  | DTypeAlias(vars, name) ->
+    { data      = ETypeAlias(vars, name, rest);
       typ       = None;
       start_pos = def.start_pos;
       end_pos   = rest.end_pos
@@ -84,19 +91,22 @@ let desugar_app = function
    but i think its over all a good idea *)
 let desugar_type_id id =
   if id = "_" then THole
-  else Tvar id
+  else TVar id
+
 
 %}
 
 %%
 
-type_list1
-: expl_type                  { [ $1 ] }
-| expl_type COMMA type_list1 { $1 :: $3 }
+type_list2
+: expl_type COMMA expl_type  { [ $1; $3 ] }
+| expl_type COMMA type_list2 { $1 :: $3   }
+;
+
 
 expl_type
 : sum_type ARROW2 expl_type                 { TArrow ([ $1 ], $3) }
-| BR_OPN type_list1 BR_CLS ARROW2 expl_type { TArrow ($2, $5) }
+| BR_OPN type_list2 BR_CLS ARROW2 expl_type { TArrow ($2, $5) }
 | sum_type                                  { $1 }
 ;
 
@@ -112,9 +122,10 @@ prod_type
 
 simpl_type
 : BR_OPN expl_type BR_CLS { $2 }
-| LID                     { desugar_type_id $1 }
-| expl_type id            { TSchema ([ $1 ], $2) }
-| BR_OPN type_list1 BR_CLS id { TSchema ($2, $4) }
+| LID                     { desugar_type_id $1   }
+| AID                     { TVar $1              }
+| expl_type LID           { TSchema ([ $1 ], $2) }
+| BR_OPN type_list2 BR_CLS LID { TSchema ($2, $4) }
 | TYP_KW_INT              { TInt }
 | TYP_KW_BOOL             { TBool }
 | TYP_KW_UNIT             { TUnit }
@@ -179,6 +190,11 @@ expr_simple
 | KW_FALSE { make (EBool false) }
 ;
 
+(* clause *)
+(* : UID LID ARROW2 *)
+
+(* all this requires reworking to new model *)
+(* TODO: rework this                        *)
 clauses
 : LID ARROW2     expr
   { let end_pos = Parsing.symbol_end_pos () in
@@ -219,11 +235,28 @@ types
 | const BAR types        { $1 :: $3 }
 ;
 
+scheme
+: LID                         { ([], $1)   }
+| AID LID                     { ([$1], $2) }
+| BR_OPN aid_list2 BR_CLS LID { ($2, $4)   }
+;
+
+aid_list2
+: AID COMMA AID          { [$1; $3] }
+| AID COMMA aid_list2    { $1 :: $3 }
+;
+
 def
-: KW_LET LID EQ expr                 { make (DLet($2, $4))      }
-| KW_LET LID id_list1 EQ expr        { desugar_let_fun $2 $3 $5 }
-| KW_LET KW_REC LID id_list1 EQ expr { desugar_let_rec $3 $4 $6 }
-| KW_TYPE LID EQ bar_opt types       { make (DType ($2, $5))    }
+: KW_LET LID EQ expr                     { make (DLet($2, $4))                }
+| KW_LET LID TYP_COLON expl_type EQ expr { make_with_typ (DLet($2, $6)) $4    }
+| KW_LET LID id_list1 EQ expr            { desugar_let_fun $2 $3 $5 None      }
+| KW_LET LID id_list1
+  TYP_COLON expl_type EQ expr            { desugar_let_fun $2 $3 $7 (Some $5) }
+| KW_LET KW_REC LID id_list1 EQ expr     { desugar_let_rec $3 $4 $6 None      }
+| KW_LET KW_REC LID id_list1
+  TYP_COLON expl_type EQ expr            { desugar_let_rec $3 $4 $8 (Some $6) }
+| KW_TYPE scheme EQ bar_opt types           { make (DType ($2, $5))              }
+| KW_TYPE scheme EQ expl_type               { make (DTypeAlias ($2, $4))              }
 ;
 
 def_list1

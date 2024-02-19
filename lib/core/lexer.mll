@@ -73,6 +73,7 @@ rule token = parse
   | ":"  { YaccParser.TYP_COLON }
   | lvar_start var_char* as x { tokenize_ident x }
   | uvar_start var_char* as x { YaccParser.UID x }
+  | '\'' var_char*       as x { YaccParser.AID x }
   | digit var_char*      as x { tokenize_number lexbuf x }
   | eof    { YaccParser.EOF }
   | _ as x {
