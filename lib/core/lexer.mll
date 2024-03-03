@@ -8,7 +8,6 @@ let report_error_lex (lexbuf : Lexing.lexbuf) fmt =
 let kw_map =
   let open YaccParser in
   [ "absurd", KW_ABSURD
-  ; "case",   KW_CASE
   ; "else",   KW_ELSE
   ; "end",    KW_END
   ; "false",  KW_FALSE
@@ -17,8 +16,6 @@ let kw_map =
   ; "fst",    KW_FST
   ; "if",     KW_IF
   ; "in",     KW_IN
-  ; "inl",    KW_INL
-  ; "inr",    KW_INR
   ; "let",    KW_LET
   ; "match",  KW_MATCH
   ; "of",     KW_OF

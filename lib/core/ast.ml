@@ -5,7 +5,7 @@
 
 type ('expr, 'typ) node = {
   data      : 'expr;
-  typ       : 'typ option;
+  typ       : 'typ;
   start_pos : Lexing.position;
   end_pos   : Lexing.position
 }
@@ -14,10 +14,10 @@ module Make(VarType : sig type t end) = struct
 
   type var_type = VarType.t
 
-  type 'typ var       = var_type * 'typ option
+  type 'typ var       = var_type * 'typ
   type      ctor_name = var_type
   type 'typ ctor_def  = ctor_name * 'typ
-  type      scheme    = var_type list * var_type
+  type      scheme    = var_type * var_type list 
 
   type 'typ expr = ('typ expr_data, 'typ) node
   and 'typ expr_data =
@@ -32,14 +32,11 @@ module Make(VarType : sig type t end) = struct
     | EPair   of 'typ expr * 'typ expr
     | EFst    of 'typ expr
     | ESnd    of 'typ expr
-    | EInl    of 'typ expr
-    | EInr    of 'typ expr
-    | ECase   of 'typ expr * 'typ case_clause * 'typ case_clause
     | EIf     of 'typ expr * 'typ expr * 'typ expr
     | ESeq    of 'typ expr * 'typ expr
     | EAbsurd of 'typ expr
     | ETypeAlias of scheme * 'typ * 'typ expr
-    | EType   of scheme *'typ ctor_def list * 'typ expr
+    | EType   of scheme * 'typ ctor_def list * 'typ expr
     (* ECtor is equivalent to EFold *)
     | ECtor   of ctor_name * 'typ expr
     (* EMatch(e, c, (x1, e1), (x2, e2)) stands
@@ -47,7 +44,6 @@ module Make(VarType : sig type t end) = struct
     (* EMatch is equivalent to EUnfold *)
     | EMatch  of 'typ expr * 'typ match_clause list
 
-  and 'typ case_clause = 'typ var * 'typ expr
   and 'typ match_clause = ctor_name * 'typ var * 'typ expr
 
   type expl_type =
@@ -57,9 +53,8 @@ module Make(VarType : sig type t end) = struct
     | TInt
     | TBool
     | TVar of var_type
-    | TSchema of expl_type list * var_type
+    | TSchema of var_type * expl_type list
     | TProd of expl_type list
-    | TCoProd of expl_type list
     | TArrow of expl_type list * expl_type
 
 end
