@@ -39,8 +39,6 @@ module Make(VarType : sig type t end) = struct
     | EType   of scheme * 'typ ctor_def list * 'typ expr
     (* ECtor is equivalent to EFold *)
     | ECtor   of ctor_name * 'typ expr
-    (* EMatch(e, c, (x1, e1), (x2, e2)) stands
-      for (match e with c x1 => e1 | x2 => e2 end) *)
     (* EMatch is equivalent to EUnfold *)
     | EMatch  of 'typ expr * 'typ match_clause list
 
