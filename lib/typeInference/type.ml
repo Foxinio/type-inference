@@ -10,43 +10,48 @@ type t =
   | TIBool
   | TIInt
   | TIVar    of Imast.IMAstVar.t * bool
-  | TIScheme of Imast.IMAstVar.t * t list
-  | TIGVar   of uvar
+  | TIADT    of Imast.IMAstVar.t * t list
   | TIUVar   of uvar
   | TIArrow  of t list * t
   | TIProd   of t list
 
-and uvar = (t option * UVar.t) ref
+and uvar_struct = { id: UVar.t; value: t option; is_gvar: bool }
+and uvar = uvar_struct ref
 and view =
   | TUnit
   | TEmpty
   | TBool
   | TInt
   | TVar    of Imast.IMAstVar.t
-  | TScheme of Imast.IMAstVar.t * t list
+  | TADT    of Imast.IMAstVar.t * t list
   | TGVar   of uvar * view option
   | TUVar   of uvar
   | TArrow  of t list * t
   | TProd   of t list
 
-let fresh_uvar () = TIUVar (ref (None, UVar.fresh ()))
-let fresh_gvar () = TIGVar (ref (None, UVar.fresh ()))
+let fresh_uvar () = TIUVar (ref { id=UVar.fresh (); value=None; is_gvar=false})
+let fresh_gvar () = TIUVar (ref { id=UVar.fresh (); value=None; is_gvar=true })
 
 let t_unit  = TIUnit
 let t_empty = TIEmpty
 let t_bool  = TIBool
 let t_int   = TIInt
-let t_var x = TIVar (x, false)
 let t_arrow  tps tp2 = TIArrow(tps, tp2)
-let t_scheme name tps = TIScheme(name, tps)
+let t_adt name tps = TIADT(name, tps)
 let t_pair   tp1 tp2 = TIProd([tp1; tp2])
 let t_prod   tps = TIProd(tps)
 
+let makeUvar value id gvar =
+  { value; id; is_gvar=gvar }
+let is_gvar {contents={is_gvar;_}} = is_gvar
+let id_of_uvar {contents={id;_}} = id
+
+
 let rec t_of_view = function
   | TUVar x -> TIUVar x
-  | TGVar (x, _) -> TIGVar x
+  | TGVar (x, _) -> TIUVar x
   | TVar x -> TIVar (x, false)
-  | TScheme(x, tps) -> TIScheme(x, tps)
+  | TADT(x, tps) -> TIADT(x, tps)
   | TUnit -> TIUnit
   | TEmpty -> TIEmpty
   | TBool -> TIBool
@@ -57,21 +62,21 @@ let rec t_of_view = function
 let rec view tp =
   let view_uvar x =
     match !x with
-    | None, _ -> None
-    | Some tp, i ->
+    | {value=None; _} -> None
+    | {value=Some tp; id; is_gvar} ->
       let tp = view tp in
-      x := Some (t_of_view tp), i;
+      x := { !x with value=Some (t_of_view tp) };
       Some tp
   in
   match tp with
-  | TIUVar ({contents=Some(_),_} as x) ->
-      Option.get (view_uvar x)
-  | TIUVar ({contents=None,_} as x) ->
-      TUVar x
-  | TIGVar x ->
+  | TIUVar x when is_gvar x ->
       TGVar (x, view_uvar x)
+  | TIUVar ({contents={value=Some _;_}} as x) ->
+      Option.get (view_uvar x)
+  | TIUVar ({contents={value=None;_}} as x) ->
+      TUVar x
   | TIVar (x, _) -> TVar x
-  | TIScheme(x, tps) -> TScheme(x, tps)
+  | TIADT (x, tps) -> TADT (x, tps)
   | TIUnit -> TUnit
   | TIEmpty -> TEmpty
   | TIBool -> TBool
@@ -82,13 +87,14 @@ let rec view tp =
 
 exception Cannot_compare of t * t
 
-let rec set_uvar_int x tp general =
+let rec set_uvar x tp =
   match !x with
-  | None, i -> x := Some tp, i
-  | Some tp_current, i when general ->
+  | {value=None; _} -> x := {!x with value=Some tp }
+  | {value=Some tp_current; is_gvar;_} when is_gvar ->
       let res = reconstruct tp tp_current in
-      x := Some res, i
-  | Some _, i -> assert false
+      x := { !x with value=Some res }
+  | {value=Some _; _} ->
+     assert false
 
 and reconstruct (new_tp : t) (currrnet_tp : t) =
   let rec reconstruct_arrows (tpsa, resa) (tpsb, resb) =
@@ -107,23 +113,23 @@ and reconstruct (new_tp : t) (currrnet_tp : t) =
   in
   let uvar_map x tp fn =
     match !x with
-    | None, i ->
-        x := Some tp, i;
+      | {value=None;_} ->
+        x := { !x with value=Some tp };
         tp
-    | Some tp, i ->
+      | {value=Some tp;_} ->
         let res = fn tp in
-        x := Some res, i;
+        x := { !x with value=Some res };
         res
   in
   match new_tp, currrnet_tp with
+  | TIUVar x, _ when is_gvar x ->
+      uvar_map x currrnet_tp (fun tp -> reconstruct tp currrnet_tp)
   | TIUVar x, _ ->
       uvar_map x currrnet_tp (fun _ -> raise (Cannot_compare (new_tp, currrnet_tp)))
-  | TIGVar x, _ ->
-      uvar_map x currrnet_tp (fun tp -> reconstruct tp currrnet_tp)
+  | _, TIUVar x when is_gvar x ->
+      uvar_map x new_tp (fun tp -> reconstruct new_tp tp)
   | _, TIUVar x ->
       uvar_map x new_tp (fun _ -> raise (Cannot_compare (new_tp, currrnet_tp)))
-  | _, TIGVar x ->
-      uvar_map x new_tp (fun tp -> reconstruct new_tp tp)
 
   | TIUnit, TIUnit -> TIUnit
 
@@ -146,12 +152,11 @@ and reconstruct (new_tp : t) (currrnet_tp : t) =
   | _, _ -> raise (Cannot_compare (new_tp, currrnet_tp))
 
 
-let set_uvar x tp =
-  set_uvar_int x tp false
-let set_gvar x tp =
-  set_uvar_int x tp true
-let t_of_uvar { contents=x,_ } = x
-let uvar_compare { contents=_,x } { contents=_,y } = UVar.compare x y
+let t_of_uvar { contents={value;_} } = value
+let uvar_compare { contents={id=id1;_}} { contents={id=id2;_}} = UVar.compare id1 id2
+
+(* TODO: implement this *)
+let uvar_disallow_alias u alias = failwith "unimplemented"
 
 module UVarSet = Set.Make(struct
   type t = uvar
@@ -163,6 +168,63 @@ module UVarMap = Map.Make(struct
   let compare = uvar_compare
 end)
 
+let rec map f : t -> t =
+  let default (t : view) : t = match t with
+    | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar _ | TGVar (_, None) -> t_of_view t
+    | TADT (name, tps) ->
+      TIADT (name, List.map (map f) tps)
+    | TGVar (uvar, Some tp) ->
+      set_uvar uvar (map f (t_of_view tp));
+      TIUVar uvar
+    | TArrow (tps, tp) ->
+      TIArrow (List.map (map f) tps, map f tp)
+    | TProd tps ->
+      TIProd (List.map (map f) tps)
+  in
+  f default
+
+let rec iter f : t -> unit =
+  let default (t : view) : unit = match t with
+    | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar _ | TGVar (_, None) -> ()
+    | TADT (name, tps) ->
+       List.iter (iter f) tps
+    | TGVar (_, Some tp) ->
+      iter f (t_of_view tp)
+    | TArrow (tps, tp) ->
+      List.iter (iter f) tps;
+      iter f tp
+    | TProd tps ->
+      List.iter (iter f) tps
+  in
+  f default
+
+let rec foldr f t init =
+  let rec default init t = match t with
+    | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar _ | TGVar (_, None) -> init
+    | TADT (name, tps) ->
+      List.fold_right (foldr f) tps init
+    | TGVar (_, Some tp) ->
+      f default (foldr f (t_of_view tp) init) (t_of_view tp)
+    | TProd tps ->
+      List.fold_right (foldr f) tps init
+    | TArrow (tps, tp) ->
+      f default (List.fold_right (foldr f) tps init) tp
+  in
+  f default (foldr f t init) t
+
+let rec foldl f init t =
+  let rec default init t = match t with
+    | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar _ | TGVar (_, None) -> init
+    | TADT (name, tps) ->
+      List.fold_left (foldl f) init tps
+    | TGVar (_, Some tp) ->
+      foldl f (f default init (t_of_view tp)) (t_of_view tp)
+    | TProd tps ->
+      List.fold_left (foldl f) init tps
+    | TArrow (tps, tp) ->
+      List.fold_left (foldl f) (f default init tp) tps
+  in
+  foldl f (f default init t) t
 
 
 type typ =
@@ -170,7 +232,7 @@ type typ =
   | Schema of t * UVarSet.t
 
 let typ_mono t = Mono t
-let typ_schema t set = Schema (t, set)
+let typ_schema set t = Schema (t, set)
 
 let instantiate ?(mapping=UVarMap.empty) = function
   | Mono tp -> tp
@@ -180,40 +242,23 @@ let instantiate ?(mapping=UVarMap.empty) = function
         Seq.filter (fun x -> UVarMap.mem x mapping |> not) |>
         Seq.flat_map (fun x -> Seq.return (x, fresh_uvar ())) in
       let mapper = UVarMap.add_seq uvars_seq mapping in
-      let rec instantiate = function
-        | TIUVar (x) ->
-            UVarMap.find_opt x mapper |> Option.value ~default:(TIUVar x)
-        | TIGVar (x) ->
-            UVarMap.find_opt x mapper |> Option.value ~default:(TIGVar x)
-        | TIArrow (tps, tp2) ->
-            let tp1 = List.map instantiate tps in
-            let tp2 = instantiate tp2 in
-            TIArrow (tp1, tp2)
-        | TIProd tps ->
-            TIProd (List.map instantiate tps)
-        | tp -> tp
-      in instantiate tp
+      let rec instantiate default tp = match tp with
+        | TIUVar x ->
+            UVarMap.find_opt x mapper |> Option.value ~default:tp
+        | tp -> view tp |> default
+      in map instantiate tp
 
 let get_uvars t =
-  let rec inner set t =
-    let fold_fun acc tp = inner set tp |> UVarSet.union acc in
-    match view t with
-    | TGVar (x, None)
-    | TUVar (x)
-        when UVarSet.mem x set -> UVarSet.singleton x
-    | TUnit | TEmpty | TBool | TInt | TVar _ | TGVar (_, None) | TUVar _ -> UVarSet.empty
-    | TGVar (_, Some tp) -> inner set (t_of_view tp)
-    | TArrow (tps, tp2) -> UVarSet.union (List.fold_left fold_fun UVarSet.empty tps) (inner set tp2)
-    | TScheme (_, tps) -> List.fold_left fold_fun UVarSet.empty tps
-    | TProd tps ->
-        List.fold_left fold_fun UVarSet.empty tps
+  let helper default (blacklist, acc) tp = match view tp with
+    | TUVar x when UVarSet.mem x blacklist |> not ->
+      blacklist, UVarSet.add x acc
+    | tp -> default (blacklist, acc) tp
   in match t with
-  | Mono t -> inner UVarSet.empty t
-  | Schema (tp, uvars) ->
-      inner uvars tp
+    | Mono t             -> foldl helper (UVarSet.empty, UVarSet.empty) t |> snd
+    | Schema (tp, uvars) -> foldl helper (uvars, UVarSet.empty) tp |> snd
 
 let generalize env_uvars tp =
   let tp_uvars  = get_uvars (typ_mono tp) in
   let diff = UVarSet.diff tp_uvars env_uvars in
-  typ_schema tp diff
+  typ_schema diff tp
 

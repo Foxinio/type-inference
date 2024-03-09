@@ -17,7 +17,7 @@ module Make(VarType : sig type t end) = struct
   type 'typ var       = var_type * 'typ
   type      ctor_name = var_type
   type 'typ ctor_def  = ctor_name * 'typ
-  type      scheme    = var_type * var_type list 
+  type      alias    = var_type * var_type list 
 
   type 'typ expr = ('typ expr_data, 'typ) node
   and 'typ expr_data =
@@ -35,8 +35,8 @@ module Make(VarType : sig type t end) = struct
     | EIf     of 'typ expr * 'typ expr * 'typ expr
     | ESeq    of 'typ expr * 'typ expr
     | EAbsurd of 'typ expr
-    | ETypeAlias of scheme * 'typ * 'typ expr
-    | EType   of scheme * 'typ ctor_def list * 'typ expr
+    | ETypeAlias of alias * 'typ * 'typ expr
+    | EType   of alias * 'typ ctor_def list * 'typ expr
     (* ECtor is equivalent to EFold *)
     | ECtor   of ctor_name * 'typ expr
     (* EMatch is equivalent to EUnfold *)
@@ -51,10 +51,66 @@ module Make(VarType : sig type t end) = struct
     | TInt
     | TBool
     | TVar of var_type
-    | TSchema of var_type * expl_type list
+    | TAlias of var_type * expl_type list
     | TProd of expl_type list
     | TArrow of expl_type list * expl_type
 
+  let rec type_fmap f t =
+    let default t = match t with
+      | TUnit | THole | TInt | TBool | TVar _ -> t
+      | TAlias (name, tps) ->
+        TAlias (name, List.map (type_fmap f) tps)
+      | TProd tps ->
+        TProd (List.map (type_fmap f) tps)
+      | TArrow (tps, tp) ->
+        TArrow (List.map (type_fmap f) tps, type_fmap f tp)
+    in
+    f default t
+
+  let rec type_iter f t =
+    let default t = match t with
+      | TUnit | THole | TInt | TBool | TVar _ -> ()
+      | TAlias (_, tps) ->
+        List.iter (type_iter f) tps
+      | TProd tps ->
+        List.iter (type_iter f) tps
+      | TArrow (tps, tp) ->
+        List.iter (type_iter f) tps;
+        type_iter f tp
+    in
+    f default t
+
+  (** The same way fold_right starts from the end of the list and makes it way outside,
+        `fold_right f [a1; ...; an] init` is `f a1 (f a2 (... (f an init) ...))`
+      foldr on trees works bottom-up. Not tail-recursive.
+      *)
+  let rec type_foldr f t init =
+    let rec default t = match t with
+      | TUnit | THole | TInt | TBool | TVar _ -> init
+      | TAlias (name, tps) ->
+        List.fold_right (type_foldr f) tps init
+      | TProd tps ->
+        List.fold_right (type_foldr f) tps init
+      | TArrow (tps, tp) ->
+        f default (List.fold_right (type_foldr f) tps init) tp
+    in
+    f default (type_foldr f t init) t
+
+  (** The same way fold_left starts from the begining of the list and makes it way inside,
+        `fold_left f init [b1; ...; bn]` is `f (... (f (f init b1) b2) ...) bn`
+      foldl on trees works top-down.
+      *)
+  let rec type_foldl f init t =
+    let rec default t = match t with
+      | TUnit | THole | TInt | TBool | TVar _ -> init
+      | TAlias (name, tps) ->
+        List.fold_left (type_foldl f) init tps
+      | TProd tps ->
+        List.fold_left (type_foldl f) init tps
+      | TArrow (tps, tp) ->
+        List.fold_left (type_foldl f) (f default init tp) tps
+    in
+    type_foldl f (f default init t) t
 end
 
 

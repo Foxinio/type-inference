@@ -1,5 +1,5 @@
 (library
- (name type_inference)
+ (name typing)
  (libraries core))
 
 (env

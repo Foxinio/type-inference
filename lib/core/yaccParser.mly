@@ -40,10 +40,10 @@ expl_type
 
 simpl_type
 : BR_OPN expl_type BR_CLS { $2 }
-| LID                     { desugar_type_id $1   }
 | AID                     { TVar $1              }
-| LID expl_type           { TSchema ($1, [$2]) }
-| LID BR_OPN type_list2 BR_CLS { TSchema ($1, $3) }
+| LID                     { desugar_type_alias $1 [] }
+| LID expl_type           { desugar_type_alias $1 [$2] }
+| LID BR_OPN type_list2 BR_CLS { desugar_type_alias $1 $3 }
 | TYP_KW_INT              { TInt }
 | TYP_KW_BOOL             { TBool }
 | TYP_KW_UNIT             { TUnit }
@@ -126,7 +126,7 @@ types
 | const BAR types        { $1 :: $3 }
 ;
 
-scheme
+alias
 : LID                         { ($1, [])   }
 | LID AID                     { ($1, [$2]) }
 | LID BR_OPN aid_list2 BR_CLS { ($1, $3)   }
@@ -146,8 +146,8 @@ def
 | KW_LET KW_REC LID id_list1 EQ expr     { desugar_let_rec $3 $4 $6 THole      }
 | KW_LET KW_REC LID id_list1
   TYP_COLON expl_type EQ expr            { desugar_let_rec $3 $4 $8 $6 }
-| KW_TYPE scheme EQ bar_opt types        { make (DType ($2, $5))              }
-| KW_TYPE scheme EQ expl_type            { make (DTypeAlias ($2, $4))              }
+| KW_TYPE alias EQ bar_opt types        { make (DType ($2, $5))              }
+| KW_TYPE alias EQ expl_type            { make (DTypeAlias ($2, $4))              }
 ;
 
 def_list1

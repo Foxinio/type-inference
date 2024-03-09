@@ -2,17 +2,21 @@
 
 open Prototyp_lib
 open Core
+open Typing
 
 let check_invariant f p =
   f p;
   p
 
-let pipeline fname =
-  fname
+let pipeline (fname : string) =
+  let _ = fname
   |> Parser.parse_file
-  |> TypeInference.to_system_f
-  |> check_invariant SystemF.ensure_well_typed
-  |> Eval.eval_program
+  |> Imast.translate_to_IMAst
+  |> TypeInference.infer in
+  (* |> TypeInference.to_system_f *)
+  (* |> check_invariant SystemF.ensure_well_typed *)
+  (* |> Eval.eval_program *)
+  ()
 
 let _ =
   if Array.length Sys.argv <> 2 then

@@ -1,6 +1,6 @@
 (library
  (name prototyp_lib)
- (libraries core))
+ (libraries core typing))
 
 
 (env

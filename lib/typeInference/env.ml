@@ -6,8 +6,8 @@ module VarMap = IMAstVar.MakeMap()
 
 type t = {
   gamma: Type.typ VarMap.t;
-  ctors: (Type.t * Imast.scheme) VarMap.t;
-  delta: Type.t VarMap.t;
+  ctors: (Type.typ * (Imast.var_type * Type.UVarSet.t)) VarMap.t;
+  delta: (Type.typ * UVarSet.t) VarMap.t;
   var_name: string VarTbl.t
 }
 
@@ -29,13 +29,13 @@ let extend_gamma ({ gamma;  _} as env) (x,_) tp =
   }
 
 let lookup_gamma {gamma;_} x =
-  VarMap.find_opt x gamma
+  VarMap.find_opt x gamma |> Option.map Type.instantiate
 
 
 (* Ctors *)
 
-let extend_by_ctors ({ctors;_} as env) lst scheme =
-  let f (var, typ) = (var, (typ, scheme)) in
+let extend_by_ctors ({ctors;_} as env) lst alias =
+  let f (var, typ) = (var, (typ, alias)) in
   let seq = List.map f lst |> List.to_seq in
   { env with ctors =
       VarMap.add_seq seq ctors
@@ -47,9 +47,15 @@ let lookup_ctor {ctors;_} name =
 
 (* Delta *)
 
-let extend_delta ({delta;_} as env) name typ =
+let extend_delta ({delta;_} as env) (name, typ) set =
   { env with delta =
-    VarMap.add name typ delta
+    VarMap.add name (typ, set) delta
+  }
+
+let extend_delta_of_list ({delta;_} as env) lst =
+  let seq = List.map (fun (x,t) -> x, (Type.typ_mono t, UVarSet.empty)) lst |> List.to_seq in
+  { env with delta =
+    VarMap.add_seq seq delta
   }
 
 let lookup_delta {delta;_} name = VarMap.find_opt name delta

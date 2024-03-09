@@ -8,20 +8,21 @@ open Type
 
 exception Cannot_unify
 
-let rec contains_uvar x tp =
-  let rec list_contains_uvar = function
-    | [] -> false
-    | tp :: tps -> contains_uvar x tp || list_contains_uvar tps
-  and contains_uvar_int = function
-    | TUVar (y) -> x == y
-    | TGVar (_, Some tp) -> contains_uvar_int tp
-    | TUnit | TEmpty | TBool | TInt | TGVar (_, None) | TVar _ -> false
-    | TArrow(tp1, tp2) ->
-      list_contains_uvar tp1 || contains_uvar x tp2
-    | TScheme (_, tps)
-    | TProd(tps) ->
-      list_contains_uvar tps
-  in Type.view tp |> contains_uvar_int
+let unwrap node env var opt =
+  let var_name env var =
+      Env.lookup_var_name env var |>
+        Option.value ~default:"<unknown>" in
+  match opt with
+  | Some t -> t
+  | None ->
+    let name = var_name env var in
+    Utils.report_error node "Undefined variable: %s" name
+
+let contains_uvar x tp =
+  let helper default init t = match Type.view t with
+    | TUVar y -> Type.uvar_compare x y = 0
+    | tp -> default init tp
+  in Type.foldl helper false tp
 
 
 let unify_with_uvar x tp =
@@ -52,9 +53,9 @@ let rec unify tp1 tp2 =
     | TGVar (_, Some tp1), tp2 -> unify_int tp1 tp2
     | tp1, TGVar (_, Some tp2) -> unify_int tp1 tp2
 
-    | TScheme (x, tps1), TScheme (y, tps2) when IMAstVar.compare x y = 0 -> 
+    | TADT (x, tps1), TADT (y, tps2) when IMAstVar.compare x y = 0 -> 
       List.iter2 unify tps1 tps2
-    | TScheme _, _-> raise Cannot_unify
+    | TADT _, _-> raise Cannot_unify
 
     | TVar x, TVar y when IMAstVar.compare x y = 0 -> ()
     | TVar _, _ -> raise Cannot_unify

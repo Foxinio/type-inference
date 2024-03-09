@@ -40,7 +40,7 @@ let pp_context_lookup x ctx =
   let { env; uvars; anons } = !ctx in
   match x, List.assq_opt x env with
     | _, Some str -> str
-    | AnonVar a, None ->
+    | AnonVar _, None ->
       let name = "'" ^ type_name_gen anons in
       ctx := { env=(x, name) :: env; uvars; anons=anons+1 };
       name
@@ -53,7 +53,7 @@ let pp_context_lookup x ctx =
 let rec pp_type ctx lvl tp =
   let rec matcher lvl = function
     | TVar x -> pp_context_lookup (AnonVar x) ctx
-    | TScheme (x, tps) -> 
+    | TADT (x, tps) -> 
       let x = pp_context_lookup (AnonVar x) ctx in
       let tps = pp_list "," ctx 1 tps |> pp_at_level 1 (List.length tps) in
       pp_at_level 0 lvl

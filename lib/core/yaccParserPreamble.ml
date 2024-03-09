@@ -3,8 +3,8 @@ open Ast
 
 type 'typ def =
 | DLet of 'typ var * 'typ expr
-| DType of scheme * (ctor_name * 'typ) list
-| DTypeAlias of scheme * 'typ
+| DType of alias * (ctor_name * 'typ) list
+| DTypeAlias of alias * 'typ
 
 let make data =
   { data      = data;
@@ -76,8 +76,10 @@ let desugar_app = function
 
 (* maybe there is a better way to do this,
    but i think its over all a good idea *)
-let desugar_type_id id =
-  if id = "_" then THole
-  else TVar id
+let desugar_type_alias id args =
+  if id = "_" then begin
+    assert(List.length args = 0);
+    THole
+  end else TAlias (id, [])
 
 

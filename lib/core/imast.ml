@@ -99,19 +99,19 @@ let translate_to_IMAst (p : Ast.program) : program =
         let delta_env = StringMap.add name name' delta_env in
         let e' = inner gamma_env delta_env e in
         ETypeAlias ((name', args'), rhs', e')
-      | Ast.EType ((scheme_name, scheme_args), ctor_list, rest) ->
-        let scheme_name', _ = fresh_var (scheme_name, THole) in
-        let delta_env_with_scheme_name = StringMap.add scheme_name scheme_name' delta_env in
-        let delta_env_with_scheme_args, scheme_args' = extend_delta delta_env_with_scheme_name scheme_args in
+      | Ast.EType ((alias_name, alias_args), ctor_list, rest) ->
+        let alias_name', _ = fresh_var (alias_name, THole) in
+        let delta_env_with_alias_name = StringMap.add alias_name alias_name' delta_env in
+        let delta_env_with_alias_args, alias_args' = extend_delta delta_env_with_alias_name alias_args in
         let f (ctor_name, ctor_type) = 
           let ctor_name' = IMAstVar.fresh () in
           VarTbl.add vartbl ctor_name' ctor_name;
           Seq.return ((ctor_name, ctor_name'),
-            (ctor_name', conv_type delta_env_with_scheme_args ctor_type))
+            (ctor_name', conv_type delta_env_with_alias_args ctor_type))
         in
-        let delta_env, ctor_list' = extend_map f ctor_list delta_env_with_scheme_name in
+        let delta_env, ctor_list' = extend_map f ctor_list delta_env_with_alias_name in
         let rest' = inner gamma_env delta_env rest in
-        EType((scheme_name', scheme_args'), ctor_list', rest')
+        EType((alias_name', alias_args'), ctor_list', rest')
       | Ast.ECtor (name, e) ->
         let name' = env_find node name delta_env in
         let e' = inner gamma_env delta_env e in
@@ -134,10 +134,10 @@ let translate_to_IMAst (p : Ast.program) : program =
         | Ast.TBool -> TBool
         | Ast.THole -> THole
         | Ast.TVar x -> TVar (env_find node x delta_env)
-        | Ast.TSchema (x, ts) -> 
+        | Ast.TAlias (x, ts) -> 
           let ts = List.map (conv_type delta_env) ts in
           let v = env_find node x delta_env in
-          TSchema (v, ts)
+          TAlias (v, ts)
         | Ast.TProd ts ->
           TProd (List.map (conv_type delta_env) ts)
         | Ast.TArrow (ts, t) ->
