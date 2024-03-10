@@ -53,7 +53,7 @@ let pp_context_lookup x ctx =
 let rec pp_type ctx lvl tp =
   let rec matcher lvl = function
     | TVar x -> pp_context_lookup (AnonVar x) ctx
-    | TADT (x, tps) -> 
+    | TADT (x, _, tps) -> 
       let x = pp_context_lookup (AnonVar x) ctx in
       let tps = pp_list "," ctx 1 tps |> pp_at_level 1 (List.length tps) in
       pp_at_level 0 lvl

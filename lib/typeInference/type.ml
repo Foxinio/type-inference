@@ -9,13 +9,18 @@ type t =
   | TIEmpty
   | TIBool
   | TIInt
-  | TIVar    of Imast.IMAstVar.t * bool
-  | TIADT    of Imast.IMAstVar.t * t list
+  | TIVar    of Imast.IMAstVar.t
+  | TIADT    of Imast.IMAstVar.t * int * t list
   | TIUVar   of uvar
   | TIArrow  of t list * t
   | TIProd   of t list
 
-and uvar_struct = { id: UVar.t; value: t option; is_gvar: bool }
+and uvar_struct = {
+  id: UVar.t;
+  value: t option;
+  is_gvar: bool;
+  level: int
+}
 and uvar = uvar_struct ref
 and view =
   | TUnit
@@ -23,50 +28,46 @@ and view =
   | TBool
   | TInt
   | TVar    of Imast.IMAstVar.t
-  | TADT    of Imast.IMAstVar.t * t list
+  | TADT    of Imast.IMAstVar.t * int * t list
   | TGVar   of uvar * view option
   | TUVar   of uvar
   | TArrow  of t list * t
   | TProd   of t list
 
-let fresh_uvar () = TIUVar (ref { id=UVar.fresh (); value=None; is_gvar=false})
-let fresh_gvar () = TIUVar (ref { id=UVar.fresh (); value=None; is_gvar=true })
-
 let t_unit  = TIUnit
 let t_empty = TIEmpty
 let t_bool  = TIBool
 let t_int   = TIInt
+let t_var x = TIVar x
 let t_arrow  tps tp2 = TIArrow(tps, tp2)
-let t_adt name tps = TIADT(name, tps)
-let t_pair   tp1 tp2 = TIProd([tp1; tp2])
-let t_prod   tps = TIProd(tps)
+let t_adt name level tps   = TIADT(name, level, tps)
+let t_pair tp1 tp2 = TIProd([tp1; tp2])
+let t_prod tps     = TIProd(tps)
 
-let makeUvar value id gvar =
-  { value; id; is_gvar=gvar }
+let makeUvar value id gvar level =
+  { value; id; is_gvar=gvar; level }
 let is_gvar {contents={is_gvar;_}} = is_gvar
 let id_of_uvar {contents={id;_}} = id
+let lvl_of_uvar {contents={level;_}} = level
 
-
-let rec t_of_view = function
-  | TUVar x -> TIUVar x
-  | TGVar (x, _) -> TIUVar x
-  | TVar x -> TIVar (x, false)
-  | TADT(x, tps) -> TIADT(x, tps)
-  | TUnit -> TIUnit
-  | TEmpty -> TIEmpty
-  | TBool -> TIBool
-  | TInt -> TIInt
-  | TArrow(tps, tp2) -> TIArrow(tps, tp2)
-  | TProd tps -> TIProd tps
+let fresh_uvar level = TIUVar (ref (makeUvar None (UVar.fresh ()) false level))
+let fresh_gvar level = TIUVar (ref (makeUvar None (UVar.fresh ()) true level))
 
 let rec view tp =
+  let rec prune_uvar = function
+    | TIUVar ({contents={ value=Some tp;_}} as x) ->
+      let shortened = prune_uvar tp in
+      x := { !x with value=Some shortened };
+      shortened
+    | tp -> tp
+  in
   let view_uvar x =
     match !x with
     | {value=None; _} -> None
-    | {value=Some tp; id; is_gvar} ->
-      let tp = view tp in
-      x := { !x with value=Some (t_of_view tp) };
-      Some tp
+    | {value=Some tp; _ } ->
+      let tp = prune_uvar tp in
+      x := { !x with value=Some tp };
+      Some (view tp)
   in
   match tp with
   | TIUVar x when is_gvar x ->
@@ -75,8 +76,8 @@ let rec view tp =
       Option.get (view_uvar x)
   | TIUVar ({contents={value=None;_}} as x) ->
       TUVar x
-  | TIVar (x, _) -> TVar x
-  | TIADT (x, tps) -> TADT (x, tps)
+  | TIVar x -> TVar x
+  | TIADT (x, lvl, tps) -> TADT (x, lvl, tps)
   | TIUnit -> TUnit
   | TIEmpty -> TEmpty
   | TIBool -> TBool
@@ -87,16 +88,46 @@ let rec view tp =
 
 exception Cannot_compare of t * t
 
+
+let rec iter f : t -> unit =
+  let default t = match t with
+    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=None;_}}) -> ()
+    | TIUVar ({contents={value=Some tp;_}}) ->
+      iter f tp
+    | TIADT (_, _, tps) ->
+       List.iter (iter f) tps
+    | TIArrow (tps, tp) ->
+      List.iter (iter f) tps;
+      iter f tp
+    | TIProd tps ->
+      List.iter (iter f) tps
+  in
+  f default
+
+
 let rec set_uvar x tp =
+  lower_uvar_level x tp;
   match !x with
   | {value=None; _} -> x := {!x with value=Some tp }
   | {value=Some tp_current; is_gvar;_} when is_gvar ->
       let res = reconstruct tp tp_current in
       x := { !x with value=Some res }
-  | {value=Some _; _} ->
+  | { value=Some _;_ } ->
      assert false
 
-and reconstruct (new_tp : t) (currrnet_tp : t) =
+and lower_uvar_level ({contents={level=level';_}} as x : uvar) tp =
+  let rec helper default = function
+    | TIUVar ({contents={ level; value=None;_}} as x) when level' < level ->
+      x := { !x with level=level' };
+    | TIUVar ({contents={ level; value=Some tp;_}} as x) when level' < level ->
+      x:= { !x with level=level' };
+      helper default tp;
+    | TIADT (_, level, _) when level > level' ->
+      raise (Cannot_compare (tp, (TIUVar x)))
+    | tp -> default tp
+  in iter helper tp
+
+and reconstruct (new_tp : t) (current_tp : t) =
   let rec reconstruct_arrows (tpsa, resa) (tpsb, resb) =
     match tpsa, tpsb with
     | tpa :: tpsa, tpb :: tpsb ->
@@ -121,36 +152,56 @@ and reconstruct (new_tp : t) (currrnet_tp : t) =
         x := { !x with value=Some res };
         res
   in
-  match new_tp, currrnet_tp with
+  match new_tp, current_tp with
+  | TIUVar x, TIADT (_, adt_lvl, _)
+  | TIADT (_, adt_lvl, _), TIUVar x when adt_lvl > lvl_of_uvar x ->
+    raise (Cannot_compare (new_tp, current_tp))
+
   | TIUVar x, _ when is_gvar x ->
-      uvar_map x currrnet_tp (fun tp -> reconstruct tp currrnet_tp)
+      uvar_map x current_tp (fun tp -> reconstruct tp current_tp)
   | TIUVar x, _ ->
-      uvar_map x currrnet_tp (fun _ -> raise (Cannot_compare (new_tp, currrnet_tp)))
+      uvar_map x current_tp (fun _ -> raise (Cannot_compare (new_tp, current_tp)))
   | _, TIUVar x when is_gvar x ->
       uvar_map x new_tp (fun tp -> reconstruct new_tp tp)
   | _, TIUVar x ->
-      uvar_map x new_tp (fun _ -> raise (Cannot_compare (new_tp, currrnet_tp)))
+      uvar_map x new_tp (fun _ -> raise (Cannot_compare (new_tp, current_tp)))
 
   | TIUnit, TIUnit -> TIUnit
 
   (* Here is a good design question, does this rule make sense *)
   | _, TIUnit    -> TIUnit
+  | TIUnit, _ -> raise (Cannot_compare (new_tp, current_tp))
 
   | TIEmpty, TIEmpty -> TIEmpty
   | TIEmpty, _     -> TIEmpty
+  | _, TIEmpty -> raise (Cannot_compare (new_tp, current_tp))
+
+  | TIVar _, _
+  | _, TIVar _ ->
+      raise (Cannot_compare (new_tp, current_tp))
+
+  | TIADT (new_adt, new_lvl, new_tps),
+    TIADT (cur_adt, cur_lvl, cur_tps) when IMAstVar.compare new_adt cur_adt = 0 ->
+      assert (cur_lvl==new_lvl);
+      (* pytanie: czy tutaj nie powinno być contrawariantne *)
+      TIADT (new_adt, new_lvl, List.map2 reconstruct new_tps cur_tps)
+  | TIADT _, _ ->
+    raise (Cannot_compare (new_tp, current_tp))
 
   | TIBool, TIBool -> TIBool
+  | TIBool, _ -> raise (Cannot_compare (new_tp, current_tp))
   | TIInt, TIInt -> TIInt
+  | TIInt, _ -> raise (Cannot_compare (new_tp, current_tp))
 
   | TIArrow (tpsa, tp_resa),
     TIArrow (tpsb, tp_resb) ->
       let args, res = reconstruct_arrows (tpsa, tp_resa) (tpsb, tp_resb) in
       t_arrow args res
+  | TIArrow _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
   | TIProd(ts1), TIProd(ts2) when List.length ts1 = List.length ts2 ->
-    TIProd (List.map2 reconstruct ts1 ts2)
-  | _, _ -> raise (Cannot_compare (new_tp, currrnet_tp))
-
+      TIProd (List.map2 reconstruct ts1 ts2)
+  | TIProd _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
 let t_of_uvar { contents={value;_} } = value
 let uvar_compare { contents={id=id1;_}} { contents={id=id2;_}} = UVar.compare id1 id2
@@ -169,59 +220,45 @@ module UVarMap = Map.Make(struct
 end)
 
 let rec map f : t -> t =
-  let default (t : view) : t = match t with
-    | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar _ | TGVar (_, None) -> t_of_view t
-    | TADT (name, tps) ->
-      TIADT (name, List.map (map f) tps)
-    | TGVar (uvar, Some tp) ->
-      set_uvar uvar (map f (t_of_view tp));
-      TIUVar uvar
-    | TArrow (tps, tp) ->
+  let default t = match t with
+    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=None;_}}) -> t
+    | TIUVar ({contents={value=Some tp;_}} as x) ->
+      set_uvar x (map f tp);
+      TIUVar x
+    | TIADT (name, lvl, tps) ->
+      TIADT (name, lvl, List.map (map f) tps)
+    | TIArrow (tps, tp) ->
       TIArrow (List.map (map f) tps, map f tp)
-    | TProd tps ->
+    | TIProd tps ->
       TIProd (List.map (map f) tps)
   in
   f default
 
-let rec iter f : t -> unit =
-  let default (t : view) : unit = match t with
-    | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar _ | TGVar (_, None) -> ()
-    | TADT (name, tps) ->
-       List.iter (iter f) tps
-    | TGVar (_, Some tp) ->
-      iter f (t_of_view tp)
-    | TArrow (tps, tp) ->
-      List.iter (iter f) tps;
-      iter f tp
-    | TProd tps ->
-      List.iter (iter f) tps
-  in
-  f default
 
 let rec foldr f t init =
   let rec default init t = match t with
-    | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar _ | TGVar (_, None) -> init
-    | TADT (name, tps) ->
+    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=None;_}}) -> init
+    | TIADT (_, _, tps) ->
       List.fold_right (foldr f) tps init
-    | TGVar (_, Some tp) ->
-      f default (foldr f (t_of_view tp) init) (t_of_view tp)
-    | TProd tps ->
+    | TIUVar ({contents={value=Some tp;_}}) ->
+      f default (foldr f tp init) tp
+    | TIProd tps ->
       List.fold_right (foldr f) tps init
-    | TArrow (tps, tp) ->
+    | TIArrow (tps, tp) ->
       f default (List.fold_right (foldr f) tps init) tp
   in
   f default (foldr f t init) t
 
 let rec foldl f init t =
   let rec default init t = match t with
-    | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar _ | TGVar (_, None) -> init
-    | TADT (name, tps) ->
+    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=None;_}}) -> init
+    | TIADT (_, _, tps) ->
       List.fold_left (foldl f) init tps
-    | TGVar (_, Some tp) ->
-      foldl f (f default init (t_of_view tp)) (t_of_view tp)
-    | TProd tps ->
+    | TIUVar ({contents={value=Some tp;_}}) ->
+      foldl f (f default init tp) tp
+    | TIProd tps ->
       List.fold_left (foldl f) init tps
-    | TArrow (tps, tp) ->
+    | TIArrow (tps, tp) ->
       List.fold_left (foldl f) (f default init tp) tps
   in
   foldl f (f default init t) t
@@ -234,23 +271,23 @@ type typ =
 let typ_mono t = Mono t
 let typ_schema set t = Schema (t, set)
 
-let instantiate ?(mapping=UVarMap.empty) = function
+let instantiate ?(mapping=UVarMap.empty) level = function
   | Mono tp -> tp
   | Schema (tp, uvars) ->
       let uvars_seq =
         UVarSet.to_seq uvars |>
         Seq.filter (fun x -> UVarMap.mem x mapping |> not) |>
-        Seq.flat_map (fun x -> Seq.return (x, fresh_uvar ())) in
+        Seq.flat_map (fun x -> Seq.return (x, fresh_uvar level)) in
       let mapper = UVarMap.add_seq uvars_seq mapping in
-      let rec instantiate default tp = match tp with
+      let instantiate default tp = match tp with
         | TIUVar x ->
             UVarMap.find_opt x mapper |> Option.value ~default:tp
-        | tp -> view tp |> default
+        | tp -> default tp
       in map instantiate tp
 
 let get_uvars t =
-  let helper default (blacklist, acc) tp = match view tp with
-    | TUVar x when UVarSet.mem x blacklist |> not ->
+  let helper default (blacklist, acc) tp = match tp with
+    | TIUVar x when UVarSet.mem x blacklist |> not ->
       blacklist, UVarSet.add x acc
     | tp -> default (blacklist, acc) tp
   in match t with

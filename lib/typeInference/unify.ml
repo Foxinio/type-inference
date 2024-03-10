@@ -21,7 +21,7 @@ let unwrap node env var opt =
 let contains_uvar x tp =
   let helper default init t = match Type.view t with
     | TUVar y -> Type.uvar_compare x y = 0
-    | tp -> default init tp
+    | _ -> default init t
   in Type.foldl helper false tp
 
 
@@ -53,7 +53,8 @@ let rec unify tp1 tp2 =
     | TGVar (_, Some tp1), tp2 -> unify_int tp1 tp2
     | tp1, TGVar (_, Some tp2) -> unify_int tp1 tp2
 
-    | TADT (x, tps1), TADT (y, tps2) when IMAstVar.compare x y = 0 -> 
+    | TADT (x, lvl1, tps1), TADT (y, lvl2, tps2) when IMAstVar.compare x y = 0 -> 
+      assert(lvl1=lvl2);
       List.iter2 unify tps1 tps2
     | TADT _, _-> raise Cannot_unify
 
