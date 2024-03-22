@@ -2,11 +2,11 @@
 %token<string> LID UID AID 
 /** AID - apostrophe ids */
 %token<int> NUM
-%token BR_OPN BR_CLS CBR_OPN CBR_CLS
-%token TYP_STAR TYP_PLUS TYP_COLON
-%token ARROW2 BAR COMMA DOT EQ SEMICOLON
+%token BR_OPN BR_CLS
+%token TYP_STAR TYP_COLON
+%token ARROW2 BAR COMMA EQ SEMICOLON
 %token KW_ABSURD KW_ELSE KW_BEGIN KW_END KW_FALSE KW_FIX KW_FN KW_FST KW_IF
-%token KW_IN KW_LET KW_MATCH KW_OF KW_REC KW_SND KW_THEN KW_TRUE KW_TYPE
+%token KW_IN KW_LET KW_MATCH KW_REC KW_SND KW_THEN KW_TRUE KW_TYPE
 %token KW_WITH
 %token TYP_KW_INT TYP_KW_BOOL TYP_KW_UNIT
 %token EOF
@@ -127,11 +127,6 @@ const_list
 | const BAR const_list { $1 :: $3 }
 ;
 
-types
-: const  { [ $1 ]   }
-| const BAR types        { $1 :: $3 }
-;
-
 alias
 : LID                         { ($1, [])   }
 | LID AID                     { ($1, [$2]) }
@@ -152,7 +147,7 @@ def
 | KW_LET KW_REC LID id_list1 EQ expr     { desugar_let_rec $3 $4 $6 THole      }
 | KW_LET KW_REC LID id_list1
   TYP_COLON expl_type EQ expr            { desugar_let_rec $3 $4 $8 $6 }
-| KW_TYPE alias EQ bar_opt types        { make (DType ($2, $5))              }
+| KW_TYPE alias EQ bar_opt const_list   { make (DType ($2, $5))              }
 | KW_TYPE alias EQ expl_type            { make (DTypeAlias ($2, $4))              }
 ;
 

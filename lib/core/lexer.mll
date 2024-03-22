@@ -18,7 +18,6 @@ let kw_map =
   ; "in",     KW_IN
   ; "let",    KW_LET
   ; "match",  KW_MATCH
-  ; "of",     KW_OF
   ; "rec",    KW_REC
   ; "snd",    KW_SND
   ; "then",   KW_THEN
@@ -57,15 +56,11 @@ rule token = parse
   | "//" { skip_line lexbuf; token lexbuf }
   | "("  { YaccParser.BR_OPN    }
   | ")"  { YaccParser.BR_CLS    }
-  | "{"  { YaccParser.CBR_OPN   }
-  | "}"  { YaccParser.CBR_CLS   }
   | "=>" { YaccParser.ARROW2    }
   | "|"  { YaccParser.BAR       }
   | ","  { YaccParser.COMMA     }
-  | "."  { YaccParser.DOT       }
   | "="  { YaccParser.EQ        }
   | ";"  { YaccParser.SEMICOLON }
-  | "+"  { YaccParser.TYP_PLUS  }
   | "*"  { YaccParser.TYP_STAR  }
   | ":"  { YaccParser.TYP_COLON }
   | lvar_start var_char* as x { tokenize_ident x }
