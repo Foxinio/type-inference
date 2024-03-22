@@ -27,6 +27,12 @@ type_list2
 ;
 
 
+type_list1
+: expl_type                  { [ $1 ] }
+| expl_type COMMA type_list2 { $1 :: $3   }
+;
+
+
 expl_type
 : prod_type ARROW2 expl_type                 { TArrow ([ $1 ], $3) }
 | BR_OPN type_list2 BR_CLS ARROW2 expl_type { TArrow ($2, $5) }
@@ -42,8 +48,8 @@ simpl_type
 : BR_OPN expl_type BR_CLS { $2 }
 | AID                     { TVar $1              }
 | LID                     { desugar_type_alias $1 [] }
-| LID expl_type           { desugar_type_alias $1 [$2] }
-| LID BR_OPN type_list2 BR_CLS { desugar_type_alias $1 $3 }
+(* | LID expl_type           { desugar_type_alias $1 [$2] } *)
+| LID BR_OPN type_list1 BR_CLS { desugar_type_alias $1 $3 }
 | TYP_KW_INT              { TInt }
 | TYP_KW_BOOL             { TBool }
 | TYP_KW_UNIT             { TUnit }
@@ -113,7 +119,7 @@ clauses
 ;
 
 const
-: LID TYP_COLON expl_type  { ($1, $3) }
+: UID TYP_COLON expl_type  { ($1, $3) }
 ;
 
 const_list
