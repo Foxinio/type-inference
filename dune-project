@@ -1,4 +1,5 @@
-(lang dune 3.12)
+(lang dune 3.13)
+(using menhir 3.0)
 
 (name prototyp)
 

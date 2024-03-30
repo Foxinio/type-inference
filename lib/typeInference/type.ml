@@ -3,23 +3,35 @@ open Core
 
 (** Internal representation of types *)
 module UVar = Tvar.Make()
+module TVar = Tvar.Make()
+module TVarSet = TVar.MakeSet()
+module TVarMap = TVar.MakeMap()
+
+module Level = struct
+  type t = int
+  let starting = 0
+  let increase = (+) 1
+  let compare = compare
+end
 
 type t =
   | TIUnit
   | TIEmpty
   | TIBool
   | TIInt
-  | TIVar    of Imast.IMAstVar.t
-  | TIADT    of Imast.IMAstVar.t * int * t list
+  | TIVar    of TVar.t
+  | TIADT    of IMAstVar.t * Level.t * t list
   | TIUVar   of uvar
   | TIArrow  of t list * t
   | TIProd   of t list
 
+(* TODO: Change value from option to some kind of Either.t that
+   either keeps level or replaced type *)
 and uvar_struct = {
   id: UVar.t;
   value: t option;
   is_gvar: bool;
-  level: int
+  level: Level.t
 }
 and uvar = uvar_struct ref
 and view =
@@ -27,8 +39,8 @@ and view =
   | TEmpty
   | TBool
   | TInt
-  | TVar    of Imast.IMAstVar.t
-  | TADT    of Imast.IMAstVar.t * int * t list
+  | TVar    of TVar.t
+  | TADT    of IMAstVar.t * Level.t * t list
   | TGVar   of uvar * view option
   | TUVar   of uvar
   | TArrow  of t list * t
@@ -44,14 +56,16 @@ let t_adt name level tps   = TIADT(name, level, tps)
 let t_pair tp1 tp2 = TIProd([tp1; tp2])
 let t_prod tps     = TIProd(tps)
 
-let makeUvar value id gvar level =
-  { value; id; is_gvar=gvar; level }
+let makeUvar gvar level =
+  { value=None; id=UVar.fresh (); is_gvar=gvar; level }
 let is_gvar {contents={is_gvar;_}} = is_gvar
+let set_gvar x v = x := { !x with is_gvar=v }
 let id_of_uvar {contents={id;_}} = id
 let lvl_of_uvar {contents={level;_}} = level
 
-let fresh_uvar level = TIUVar (ref (makeUvar None (UVar.fresh ()) false level))
-let fresh_gvar level = TIUVar (ref (makeUvar None (UVar.fresh ()) true level))
+let fresh_uvar level = TIUVar (ref (makeUvar false level))
+let fresh_gvar level = TIUVar (ref (makeUvar true level))
+let fresh_tvar () = TIVar (TVar.fresh ())
 
 let rec view tp =
   let rec prune_uvar = function
@@ -104,12 +118,20 @@ let rec iter f : t -> unit =
   in
   f default
 
+let attempt_split_tarrow = function
+  | TIArrow (tps, tres) ->
+    let f arg res = t_arrow [arg] res in
+    List.fold_right f tps tres
+  | tp -> tp
+
 
 let rec set_uvar x tp =
   lower_uvar_level x tp;
   match !x with
-  | {value=None; _} -> x := {!x with value=Some tp }
-  | {value=Some tp_current; is_gvar;_} when is_gvar ->
+  | {value=None; is_gvar;_} ->
+    let tp = if is_gvar then tp else attempt_split_tarrow tp in
+    x := {!x with value=Some tp }
+  | {value=Some tp_current; is_gvar=true;_} ->
       let res = reconstruct tp tp_current in
       x := { !x with value=Some res }
   | { value=Some _;_ } ->
@@ -151,6 +173,13 @@ and reconstruct (new_tp : t) (current_tp : t) =
         let res = fn tp in
         x := { !x with value=Some res };
         res
+  in
+  let _ =
+    match new_tp, current_tp with
+    | TIUVar x, TIUVar y when is_gvar x || is_gvar y ->
+      set_gvar x true;
+      set_gvar y true
+    | _ -> ()
   in
   match new_tp, current_tp with
   | TIUVar x, TIADT (_, adt_lvl, _)
@@ -206,18 +235,33 @@ and reconstruct (new_tp : t) (current_tp : t) =
 let t_of_uvar { contents={value;_} } = value
 let uvar_compare { contents={id=id1;_}} { contents={id=id2;_}} = UVar.compare id1 id2
 
-(* TODO: implement this *)
-let uvar_disallow_alias u alias = failwith "unimplemented"
-
 module UVarSet = Set.Make(struct
   type t = uvar
   let compare = uvar_compare
 end)
 
-module UVarMap = Map.Make(struct
-  type t = uvar
-  let compare = uvar_compare
-end)
+
+let rec fold_map f init =
+  let default acc t = match t with
+    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=None;_}}) -> acc, t
+    | TIUVar ({contents={value=Some tp;_}} as x) ->
+      let acc, tp = fold_map f acc tp in
+      set_uvar x tp;
+      acc, TIUVar x
+    | TIADT (name, lvl, tps) ->
+      let acc, tps = List.fold_left_map (fold_map f) acc tps in
+      acc, TIADT (name, lvl, tps)
+    | TIArrow (tps, tp) ->
+      let acc, tps = List.fold_left_map (fold_map f) acc tps in
+      let acc, tp = fold_map f acc tp in
+      acc, TIArrow (tps, tp)
+    | TIProd tps ->
+      let acc, tps = List.fold_left_map (fold_map f) acc tps in
+      acc, TIProd tps
+  in
+  f default init
+
+  
 
 let rec map f : t -> t =
   let default t = match t with
@@ -266,36 +310,50 @@ let rec foldl f init t =
 
 type typ =
   | Mono of t
-  | Schema of t * UVarSet.t
+  | Schema of t * TVarSet.t
 
 let typ_mono t = Mono t
 let typ_schema set t = Schema (t, set)
 
-let instantiate ?(mapping=UVarMap.empty) level = function
+let instantiate ?(mapping=TVarMap.empty) level = function
   | Mono tp -> tp
-  | Schema (tp, uvars) ->
-      let uvars_seq =
-        UVarSet.to_seq uvars |>
-        Seq.filter (fun x -> UVarMap.mem x mapping |> not) |>
+  | Schema (tp, tvars) ->
+      let tvars_seq =
+        TVarSet.to_seq tvars |>
+        Seq.filter (fun x -> TVarMap.mem x mapping |> not) |>
         Seq.flat_map (fun x -> Seq.return (x, fresh_uvar level)) in
-      let mapper = UVarMap.add_seq uvars_seq mapping in
+      let mapper = TVarMap.add_seq tvars_seq mapping in
       let instantiate default tp = match tp with
-        | TIUVar x ->
-            UVarMap.find_opt x mapper |> Option.value ~default:tp
+        | TIVar x ->
+            TVarMap.find_opt x mapper |> Option.value ~default:tp
         | tp -> default tp
       in map instantiate tp
 
-let get_uvars t =
-  let helper default (blacklist, acc) tp = match tp with
-    | TIUVar x when UVarSet.mem x blacklist |> not ->
-      blacklist, UVarSet.add x acc
-    | tp -> default (blacklist, acc) tp
-  in match t with
-    | Mono t             -> foldl helper (UVarSet.empty, UVarSet.empty) t |> snd
-    | Schema (tp, uvars) -> foldl helper (uvars, UVarSet.empty) tp |> snd
+let generalize accepted_level tp =
+  (* TODO: Change it so that generalization isn't dependent
+      on uvar not being on blacklist, but instead take apropiate level
+      and generalize only if uvar is on that particular level *)
+  let module UVartbl = UVar.MakeHashtbl() in
+  let mapper = UVartbl.create 11 in
+  let lookup x =
+    match UVartbl.find_opt mapper x with
+    | Some x -> x
+    | None   ->
+      let v = TVar.fresh () in
+      UVartbl.add mapper x v;
+      v
+  in
+  let rec helper default tp = match tp with
+    | TIUVar ({contents={value=Some _; is_gvar=true; level; _}} as x)
+        when level >= accepted_level ->
+      x := {!x with is_gvar=false};
+      helper default tp
+    | TIUVar ({contents={value=None; level;_}} as x) when level = accepted_level ->
+      TIVar (lookup (id_of_uvar x))
+    | tp -> default tp
+  in 
+  let tp = map helper tp in
+  let lst = UVartbl.to_seq mapper |> Seq.unzip |> snd |> TVarSet.of_seq in
+  Schema (tp, lst)
 
-let generalize env_uvars tp =
-  let tp_uvars  = get_uvars (typ_mono tp) in
-  let diff = UVarSet.diff tp_uvars env_uvars in
-  typ_schema diff tp
 

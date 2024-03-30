@@ -19,9 +19,9 @@ let unwrap node env var opt =
     let name = var_name env var in
     Utils.report_error node "Undefined variable: %s" name
 
-let uvar_of_view t = match Type.view t with
-  | TUVar u | TGVar (u,_) -> u
-  | _ -> failwith "Internal error, passed non uvar to uvar getter"
+let split_tarrow =
+  let f arg res = Type.t_arrow [arg] res in
+  List.fold_right f
 
 (** Typing environments *)
 let rec infer env (node : Imast.expl_type Imast.expr) : Type.t Imast.expr =
@@ -44,23 +44,23 @@ and convert_type node env explicit_type : Type.t =
     Type.t_prod tps
   | Imast.TVar v -> 
     let (typ, set) = Env.lookup_delta env v |> unwrap v in
-    if Type.UVarSet.is_empty set then Env.instantiate env typ
+    if Type.TVarSet.is_empty set then Env.instantiate env typ
     else 
       Utils.report_error node "Alias used without parameters: %s" (var_name env v)
   | Imast.TAlias (name, tps) ->
     let (typ, set) = Env.lookup_delta env name |> unwrap name in
     let mapping = List.map (convert_type node env) tps |>
           List.to_seq |>
-          Seq.zip (Type.UVarSet.to_seq set) |>
-          Type.UVarMap.of_seq in
+          Seq.zip (Type.TVarSet.to_seq set) |>
+          Type.TVarMap.of_seq in
     Env.instantiate env ~mapping typ
 
 and infer_type env (e : Imast.expl_type Imast.expr) : Type.t Imast.expr_data * Type.t =
   let unwrap name = unwrap e env name in
   let gen_mapping uvar_set =
-    let uvar_seq = Type.UVarSet.to_seq uvar_set |>
+    let uvar_seq = Type.TVarSet.to_seq uvar_set |>
       Seq.map (fun uvar -> (uvar, Env.fresh_uvar env)) in
-    let mapping = Type.UVarMap.of_seq uvar_seq in
+    let mapping = Type.TVarMap.of_seq uvar_seq in
     let instance_args = Seq.unzip uvar_seq |> snd |> List.of_seq in
     mapping, instance_args
   in
@@ -87,17 +87,20 @@ and infer_type env (e : Imast.expl_type Imast.expr) : Type.t Imast.expr_data * T
     let xs : Type.t var list = List.map (convert_var env) xs in
     let tps, env = extend_list xs env in
     let body' = infer env body in
-    EFn (xs, body'), Type.t_arrow tps body'.typ
+    EFn (xs, body'), split_tarrow tps body'.typ
   | EFix(f, xs, body) ->
     let xs = List.map (convert_var env) xs in
     let tps, env = extend_list xs env in
     let tp2 = Env.fresh_uvar env in
     let f = convert_var env f in
-    let f_tp = Type.t_arrow tps tp2 in
+    let f_tp = split_tarrow tps tp2 in
     let env = Env.extend_gamma env f (Type.typ_mono f_tp) in
     let body' = infer_and_check_type env body tp2 in
     EFix(f, xs, body'), f_tp
   | EApp(e1, es) ->
+    (* this doesn't work, at some point any gvar will be unified with uvar
+      and at that point any information about multiarg function
+      that might be kept in uvar will be lost *)
     let generate _ = Env.fresh_uvar env in
     let tps = List.map generate es in
     let tp1 = Env.fresh_uvar env in
@@ -105,9 +108,10 @@ and infer_type env (e : Imast.expl_type Imast.expr) : Type.t Imast.expr_data * T
     let es' = List.map2 (fun e tp -> infer_and_check_type env e tp) es tps in
     EApp(e1', es'), tp1
   | ELet(x, e1, e2) ->
-    let e1' = infer env e1 in
-    let x = convert_var env x in
-    let tp = Type.generalize (Env.get_uvars env) e1'.typ in
+    let env' = Env.increase_level env in
+    let e1' = infer env' e1 in
+    let x = convert_var env' x in
+    let tp = Env.generalize env' e1'.typ in
     let e2' = infer (Env.extend_gamma env x tp) e2 in
     ELet(x, e1', e2'), e2'.typ
   | EPair(e1, e2) ->
@@ -140,30 +144,32 @@ and infer_type env (e : Imast.expl_type Imast.expr) : Type.t Imast.expr_data * T
   | EType ((name,arg_list) as alias, ctor_defs, rest) ->
     let out_type = Env.fresh_uvar env in
     let env = Env.increase_level env in
-    let arg_list = List.map (fun x -> (x, Env.fresh_uvar env)) arg_list in
-    let uvars = List.map snd arg_list in
-    let set = List.map uvar_of_view uvars |> Type.UVarSet.of_list in
-    let env = Env.extend_delta_with_adt env name uvars set in
+    let arg_list = List.map (fun x -> (x, Type.TVar.fresh ())) arg_list in
+    let set = List.map snd arg_list |> Type.TVarSet.of_list in
+    let arg_list = List.map (fun (x,t) -> x, Type.t_var t) arg_list in
+    let tvars = List.map snd arg_list in
+    let env = Env.extend_delta_with_adt env name tvars set in
     let env' = Env.extend_delta_of_list env arg_list in
     let ctor_defs = List.map (convert_var env') ctor_defs in
     let f (name, typ) = name, Type.typ_schema set typ in
     let ctor_defs' = List.map f ctor_defs in
-    let env = Env.extend_by_ctors env ctor_defs' name uvars set  in
+    let env = Env.extend_by_ctors env ctor_defs' name tvars set  in
     let rest' = infer_and_check_type env rest out_type in
     EType(alias, ctor_defs, rest'), rest'.typ
 
   | ECtor (name, body) ->
-    let expected_typ, uvar_set, alias_typ = Env.lookup_ctor env name |> unwrap name in
-    let mapping, alias_args = gen_mapping uvar_set in
+    let expected_typ, var_set, alias_typ = Env.lookup_ctor env name |> unwrap name in
+    let mapping, alias_args = gen_mapping var_set in
     let expected_type = Env.instantiate ~mapping env expected_typ in
     let alias_t = Env.instantiate ~mapping env alias_typ in
     let body' = infer_and_check_type env body expected_type in
     ECtor (name, body'), alias_t
 
   | ETypeAlias ((name, arg_list) as alias, typ, rest) ->
-    let arg_list = List.map (fun x -> (x, Env.fresh_uvar env)) arg_list in
+    let arg_list = List.map (fun x -> (x, Type.TVar.fresh ())) arg_list in
+    let set = List.map snd arg_list |> Type.TVarSet.of_list in
+    let arg_list = List.map (fun (x,t) -> x, Type.t_var t) arg_list in
     let env' = Env.extend_delta_of_list env arg_list in
-    let set = List.map (fun (a,b) -> uvar_of_view b) arg_list |> Type.UVarSet.of_list in
     let typ = convert_type e env' typ in
     let typ' = Type.typ_schema set typ in
     let env = Env.extend_delta_with_alias env (name, typ') set in
@@ -171,8 +177,8 @@ and infer_type env (e : Imast.expl_type Imast.expr) : Type.t Imast.expr_data * T
     ETypeAlias(alias, typ, rest'), rest'.typ
 
   | EMatch (sub_expr, ((ctor_name, _, _) :: _ as clauses)) ->
-    let _, uvar_set, adt_typ = Env.lookup_ctor env ctor_name |> unwrap ctor_name in
-    let mapping, instance_args = gen_mapping uvar_set in
+    let _, var_set, adt_typ = Env.lookup_ctor env ctor_name |> unwrap ctor_name in
+    let mapping, instance_args = gen_mapping var_set in
     let adt_t = Env.instantiate ~mapping env adt_typ in
     let sub_expr' = infer_and_check_type env sub_expr adt_t in
     let out_type = Env.fresh_uvar env in
@@ -209,5 +215,5 @@ let infer ((p, env) : Imast.program) : program =
   let inner_env = Env.of_var_names env in
   let data, typ = infer_type inner_env p in
   (* should be a better way to return generalized type *)
-  let _tp = Type.generalize Type.UVarSet.empty typ in
+  let _tp = Type.generalize Type.Level.starting typ in
   { p with data; typ }, env

@@ -58,7 +58,7 @@ let rec unify tp1 tp2 =
       List.iter2 unify tps1 tps2
     | TADT _, _-> raise Cannot_unify
 
-    | TVar x, TVar y when IMAstVar.compare x y = 0 -> ()
+    | TVar x, TVar y when Type.TVar.compare x y = 0 -> ()
     | TVar _, _ -> raise Cannot_unify
 
     | TUnit, TUnit -> ()

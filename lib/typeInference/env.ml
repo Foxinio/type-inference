@@ -6,10 +6,10 @@ module VarMap = IMAstVar.MakeMap()
 
 type t = {
   gamma: Type.typ VarMap.t;
-  ctors: (Type.typ * Type.UVarSet.t * Type.typ) VarMap.t;
-  delta: (Type.typ * UVarSet.t) VarMap.t;
+  ctors: (Type.typ * TVarSet.t * Type.typ) VarMap.t;
+  delta: (Type.typ * TVarSet.t) VarMap.t;
   var_name: string VarTbl.t;
-  level: int;
+  level: Level.t;
 }
 
 let empty = {
@@ -17,20 +17,24 @@ let empty = {
   ctors=VarMap.empty;
   delta=VarMap.empty;
   var_name=VarTbl.create 11;
-  level=0;
+  level=Level.starting;
 }
 let of_var_names var_name =
   { empty with var_name }
 
 
 (* uvar levels *)
-let increase_level({ level;_} as env) = { env with level=level+1 }
+let increase_level({ level;_} as env) = { env with level=Level.increase level }
 
 let fresh_uvar {level;_} = Type.fresh_uvar level
 let fresh_gvar {level;_} = Type.fresh_gvar level
 
-let instantiate ?(mapping=UVarMap.empty) {level;_} typ =
+let instantiate ?(mapping=TVarMap.empty) {level;_} typ =
   Type.instantiate ~mapping level typ
+
+let generalize {level;_} tp =
+  Type.generalize level tp
+
 
 (* Gamma *)
 
@@ -74,21 +78,13 @@ let extend_delta_with_adt ({delta; level;_} as env) name lst set =
 
 let extend_delta_of_list ({delta;_} as env) lst =
   let seq = List.map
-    (fun (x,t) -> x, (Type.typ_mono t, UVarSet.empty)) lst
+    (fun (x,t) -> x, (Type.typ_mono t, TVarSet.empty)) lst
     |> List.to_seq in
   { env with delta =
     VarMap.add_seq seq delta
   }
 
 let lookup_delta {delta;_} name = VarMap.find_opt name delta
-
-
-(* Uvars *)
-
-let get_uvars {gamma;_} =
-  VarMap.fold (fun _name typ acc ->
-    Type.get_uvars typ |> UVarSet.union acc) gamma UVarSet.empty
-
 
 (* var names *)
 

@@ -3,11 +3,3 @@
  (name main)
  (libraries prototyp_lib core))
 
-(env
-    (dev
-        (flags (:standard -g -w -39-33-26-27-32-21-66))
-    )
-    (release
-        (flags (:standard -w -39-33-26-27))
-    )
-)

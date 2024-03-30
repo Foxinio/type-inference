@@ -3,12 +3,13 @@ open Type
 (* ========================================================================= *)
 (* Pretty printing of types *)
 
-type ('a, 'b) vars =
+type ('a, 'b, 'c) vars =
   | AnonVar of 'a
+  | NamedVar of 'c
   | UVar of 'b
 
-type ('a, 'b) ctx = {
-  env:   (('a, 'b) vars * string) list;
+type ('a, 'b, 'c) ctx = {
+  env:   (('a, 'b, 'c) vars * string) list;
   uvars: int;
   anons: int
 }
@@ -29,7 +30,7 @@ let pp_context () = ref {env=[]; uvars=0; anons=0}
 
 let pp_context_of_seq var_seq = 
   ref {
-    env=List.of_seq var_seq |> List.map (fun (k, v) -> (AnonVar k, v));
+    env=List.of_seq var_seq |> List.map (fun (k, v) -> (NamedVar k, v));
     uvars=0; anons=0}
 
 let pp_at_level l lvl str =
@@ -40,6 +41,9 @@ let pp_context_lookup x ctx =
   let { env; uvars; anons } = !ctx in
   match x, List.assq_opt x env with
     | _, Some str -> str
+    | NamedVar x, None ->
+      (* this shouldn't happen, internal error *)
+      raise Not_found
     | AnonVar _, None ->
       let name = "'" ^ type_name_gen anons in
       ctx := { env=(x, name) :: env; uvars; anons=anons+1 };
@@ -52,9 +56,10 @@ let pp_context_lookup x ctx =
 
 let rec pp_type ctx lvl tp =
   let rec matcher lvl = function
+    (* TODO: ensure no named var can hide under tvar *)
     | TVar x -> pp_context_lookup (AnonVar x) ctx
     | TADT (x, _, tps) -> 
-      let x = pp_context_lookup (AnonVar x) ctx in
+      let x = pp_context_lookup (NamedVar x) ctx in
       let tps = pp_list "," ctx 1 tps |> pp_at_level 1 (List.length tps) in
       pp_at_level 0 lvl
         (Printf.sprintf "%s %s" x tps)
