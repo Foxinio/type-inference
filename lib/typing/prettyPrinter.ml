@@ -8,11 +8,13 @@ type ('a, 'b, 'c) vars =
   | NamedVar of 'c
   | UVar of 'b
 
-type ('a, 'b, 'c) ctx = {
+type ('a, 'b, 'c) ctx_struct = {
   env:   (('a, 'b, 'c) vars * string) list;
   uvars: int;
   anons: int
 }
+
+type ('a, 'b, 'c) ctx = ('a, 'b, 'c) ctx_struct ref
 
 let type_name_gen i =
   let limit = (Char.code 'z') - (Char.code 'a') + 1 in
@@ -84,4 +86,6 @@ let rec pp_type ctx lvl tp =
     | [] -> "Unit"
   in Type.view tp |> matcher lvl
 
-let string_of_type = pp_type (pp_context ()) 0
+let pp_type ctx = pp_type ctx 0
+
+let string_of_type = pp_type (pp_context ())

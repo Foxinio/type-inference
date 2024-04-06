@@ -34,15 +34,14 @@ module Make(VarType : sig type t end) = struct
     | ESnd    of 'typ expr
     | EIf     of 'typ expr * 'typ expr * 'typ expr
     | ESeq    of 'typ expr * 'typ expr
-    | EAbsurd of 'typ expr
     | ETypeAlias of alias * 'typ * 'typ expr
     | EType   of alias * 'typ ctor_def list * 'typ expr
     (* ECtor is equivalent to EFold *)
     | ECtor   of ctor_name * 'typ expr
     (* EMatch is equivalent to EUnfold *)
-    | EMatch  of 'typ expr * 'typ match_clause list
+    | EMatch  of 'typ expr * 'typ clause list
 
-  and 'typ match_clause = ctor_name * 'typ var * 'typ expr
+  and 'typ clause = ctor_name * 'typ var * 'typ expr
 
   type expl_type =
     | TUnit

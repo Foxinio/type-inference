@@ -5,7 +5,7 @@
 %token BR_OPN BR_CLS
 %token TYP_STAR TYP_COLON
 %token ARROW2 BAR COMMA EQ SEMICOLON
-%token KW_ABSURD KW_ELSE KW_BEGIN KW_END KW_FALSE KW_FIX KW_FN KW_FST KW_IF
+%token KW_ELSE KW_BEGIN KW_END KW_FALSE KW_FIX KW_FN KW_FST KW_IF
 %token KW_IN KW_LET KW_MATCH KW_REC KW_SND KW_THEN KW_TRUE KW_TYPE
 %token KW_WITH
 %token TYP_KW_INT TYP_KW_BOOL TYP_KW_UNIT
@@ -79,7 +79,6 @@ expr
     { make (EMatch ($2, $5)) }
 | KW_IF expr KW_THEN expr KW_ELSE expr
     { make (EIf($2, $4, $6)) }
-| KW_ABSURD expr { make (EAbsurd $2) }
 | expr_app SEMICOLON expr { make (ESeq($1, $3)) }
 | expr_app { $1 }
 ;

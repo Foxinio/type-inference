@@ -94,7 +94,7 @@ let rec eval env (e : SystemF.expr) =
     | VUnit -> eval env e2
     | _ -> failwith "runtime error"
     end
-  | EAbsurd(e, _) | EMatchEmpty(e, _) ->
+  | EMatchEmpty(e, _) ->
     let _ = eval env e in
     failwith "runtime error"
   | ESelect(e, l) ->

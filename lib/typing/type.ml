@@ -118,18 +118,10 @@ let rec iter f : t -> unit =
   in
   f default
 
-let attempt_split_tarrow = function
-  | TIArrow (tps, tres) ->
-    let f arg res = t_arrow [arg] res in
-    List.fold_right f tps tres
-  | tp -> tp
-
-
 let rec set_uvar x tp =
   lower_uvar_level x tp;
   match !x with
   | {value=None; is_gvar;_} ->
-    let tp = if is_gvar then tp else attempt_split_tarrow tp in
     x := {!x with value=Some tp }
   | {value=Some tp_current; is_gvar=true;_} ->
       let res = reconstruct tp tp_current in
@@ -186,22 +178,14 @@ and reconstruct (new_tp : t) (current_tp : t) =
   | TIADT (_, adt_lvl, _), TIUVar x when adt_lvl > lvl_of_uvar x ->
     raise (Cannot_compare (new_tp, current_tp))
 
-  | TIUVar x, _ when is_gvar x ->
-      uvar_map x current_tp (fun tp -> reconstruct tp current_tp)
   | TIUVar x, _ ->
-      uvar_map x current_tp (fun _ -> raise (Cannot_compare (new_tp, current_tp)))
-  | _, TIUVar x when is_gvar x ->
-      uvar_map x new_tp (fun tp -> reconstruct new_tp tp)
+    uvar_map x current_tp (fun tp -> reconstruct tp current_tp)
   | _, TIUVar x ->
-      uvar_map x new_tp (fun _ -> raise (Cannot_compare (new_tp, current_tp)))
+    uvar_map x new_tp (fun tp -> reconstruct new_tp tp)
 
-  | TIUnit, TIUnit -> TIUnit
-
-  (* Here is a good design question, does this rule make sense *)
   | _, TIUnit    -> TIUnit
   | TIUnit, _ -> raise (Cannot_compare (new_tp, current_tp))
 
-  | TIEmpty, TIEmpty -> TIEmpty
   | TIEmpty, _     -> TIEmpty
   | _, TIEmpty -> raise (Cannot_compare (new_tp, current_tp))
 
@@ -212,7 +196,6 @@ and reconstruct (new_tp : t) (current_tp : t) =
   | TIADT (new_adt, new_lvl, new_tps),
     TIADT (cur_adt, cur_lvl, cur_tps) when IMAstVar.compare new_adt cur_adt = 0 ->
       assert (cur_lvl==new_lvl);
-      (* pytanie: czy tutaj nie powinno być contrawariantne *)
       TIADT (new_adt, new_lvl, List.map2 reconstruct new_tps cur_tps)
   | TIADT _, _ ->
     raise (Cannot_compare (new_tp, current_tp))

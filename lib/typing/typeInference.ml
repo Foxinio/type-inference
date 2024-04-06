@@ -137,9 +137,6 @@ and infer_type env (e : Imast.expl_type Imast.expr) : Type.t Imast.expr_data * T
     let e1' = infer_and_check_type env e1 Type.t_unit in
     let e2' = infer env e2 in
     ESeq(e1', e2'), e2'.typ
-  | EAbsurd e ->
-    let e' = infer_and_check_type env e Type.t_empty in
-    EAbsurd e', Env.fresh_uvar env
 
   | EType ((name,arg_list) as alias, ctor_defs, rest) ->
     let out_type = Env.fresh_uvar env in
@@ -192,8 +189,10 @@ and infer_type env (e : Imast.expl_type Imast.expr) : Type.t Imast.expr_data * T
     in
     let clauses' = List.map f clauses in
     EMatch (sub_expr', clauses'), out_type
-  | EMatch _ ->
-    Utils.report_error e "cannot have match with no clauses"
+
+  | EMatch (sub_expr, []) ->
+    let sub_expr' = infer_and_check_type env sub_expr Type.t_empty in
+    EMatch (sub_expr', []), Env.fresh_uvar env
 
 and infer_and_check_type env e tp =
   let open PrettyPrinter in
@@ -206,8 +205,8 @@ and infer_and_check_type env e tp =
     let ctx = Env.seq_of_var_name env |> pp_context_of_seq in
     Utils.report_error e
       "This expression has type %s, but an expression was expected of type %s."
-      (pp_type ctx 0 e'.typ)
-      (pp_type ctx 0 tp)
+      (pp_type ctx e'.typ)
+      (pp_type ctx tp)
 
 type program = Type.t Imast.expr * string Imast.VarTbl.t
 

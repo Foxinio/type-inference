@@ -59,7 +59,6 @@ val foldr : (('a -> t -> 'a) -> 'a -> t -> 'a) -> t -> 'a -> 'a
 val fold_map : (('a -> t -> 'a * t) -> 'a -> t -> 'a * t) -> 'a -> t -> 'a * t
 
 val set_uvar : uvar -> t -> unit
-val t_of_uvar : uvar -> t option
 val uvar_compare : uvar -> uvar -> int
 
 

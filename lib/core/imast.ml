@@ -89,9 +89,6 @@ let translate_to_IMAst (p : Ast.program) : program =
         let e1 = inner gamma_env delta_env e1 in
         let e2 = inner gamma_env delta_env e2 in
         ESeq (e1, e2)
-      | Ast.EAbsurd e ->
-        let e = inner gamma_env delta_env e in
-        EAbsurd e
       | Ast.ETypeAlias ((name, args), rhs, e) ->
         let delta_env', args' = extend_delta delta_env args in
         let rhs' = conv_type delta_env rhs in
