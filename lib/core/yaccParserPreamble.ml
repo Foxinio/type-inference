@@ -25,7 +25,10 @@ let extract args typ =
   in
   let extracted_typ = List.map extract_typ args in
   (List.map extract_ids args,
-   if !found then TArrow(extracted_typ, typ) else THole)
+   if !found then
+    let f arg res = TArrow ([arg], res) in
+    List.fold_right f extracted_typ typ
+    else THole)
 
 let desugar_fn args body typ =
   let args, typ = extract args typ in

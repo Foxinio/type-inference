@@ -2,10 +2,6 @@ open Core
 open Imast
 
 
-type program = Type.t Imast.expr * string Imast.VarTbl.t
-
-val infer : Imast.program -> program
-
 module TVar : Tvar.TVar_S
 module TVarSet : Set.S with type elt = TVar.t
 module TVarMap : Map.S with type key = TVar.t
@@ -37,10 +33,16 @@ module Schema : sig
   val instantiate : ?mapping:t TVarMap.t -> Type.Level.t -> typ -> t
   val generalize : Type.Level.t -> t -> typ
 
+  val get_arguments : typ -> TVarSet.t
+  val get_template : typ -> t
 end
 
+type program = Schema.typ Imast.expr * string Imast.VarTbl.t
+
+val infer : Imast.program -> program
+
 module Type : sig
-  type t
+  type t = Schema.t
   type uvar
   type view =
     | TUnit

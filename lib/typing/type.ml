@@ -298,6 +298,14 @@ type typ =
 let typ_mono t = Mono t
 let typ_schema set t = Schema (t, set)
 
+let get_arguments = function
+  | Mono _ -> TVarSet.empty
+  | Schema (_, set) -> set
+
+let get_template = function
+  | Mono t -> t
+  | Schema (t, _) -> t
+
 let instantiate ?(mapping=TVarMap.empty) level = function
   | Mono tp -> tp
   | Schema (tp, tvars) ->
@@ -329,7 +337,7 @@ let generalize accepted_level tp =
   let rec helper default tp = match tp with
     | TIUVar ({contents={value=Some _; is_gvar=true; level; _}} as x)
         when level >= accepted_level ->
-      x := {!x with is_gvar=false};
+      set_gvar x false;
       helper default tp
     | TIUVar ({contents={value=None; level;_}} as x) when level = accepted_level ->
       TIVar (lookup (id_of_uvar x))

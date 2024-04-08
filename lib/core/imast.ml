@@ -148,5 +148,5 @@ let translate_to_IMAst (p : Ast.program) : program =
   try inner StringMap.empty StringMap.empty p, vartbl
   with Out_of_scope (s, node) ->
     Utils.report_error node "Undefined variable: %s\n" s
-    
-    
+
+

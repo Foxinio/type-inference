@@ -72,3 +72,5 @@ val typ_schema : TVarSet.t -> t -> typ
 val instantiate : ?mapping:t TVarMap.t -> Level.t -> typ -> t
 val generalize : Level.t -> t -> typ
 
+val get_arguments : typ -> TVarSet.t
+val get_template : typ -> t
