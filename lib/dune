@@ -1,4 +1,4 @@
 (library
  (name prototyp_lib)
- (libraries core typing))
+ (libraries core typing system_f to_system_f))
 
