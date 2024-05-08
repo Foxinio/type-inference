@@ -33,7 +33,7 @@ let unify_with_uvar x tp =
     raise Cannot_unify
 
 
-let rec unify tp1 tp2 =
+let rec unify_equal tp1 tp2 =
   let rec unify_int tpv1 tpv2 =
     match tpv1, tpv2 with
     | TUVar (x), TUVar (y)
@@ -55,7 +55,7 @@ let rec unify tp1 tp2 =
 
     | TADT (x, lvl1, tps1), TADT (y, lvl2, tps2) when IMAstVar.compare x y = 0 -> 
       assert(lvl1=lvl2);
-      List.iter2 unify tps1 tps2
+      List.iter2 unify_equal tps1 tps2
     | TADT _, _-> raise Cannot_unify
 
     | TVar x, TVar y when Type.TVar.compare x y = 0 -> ()
@@ -74,13 +74,59 @@ let rec unify tp1 tp2 =
     | TInt, _ -> raise Cannot_unify
 
     | TArrow(ta1, tb1), TArrow(ta2, tb2) ->
-      List.iter2 unify ta1 ta2;
-      unify tb1 tb2
+      List.iter2 unify_equal ta1 ta2;
+      unify_equal tb1 tb2
     | TArrow _, _ -> raise Cannot_unify
 
     | TProd(ts1), TProd(ts2) ->
-      List.iter2 unify ts1 ts2
+      List.iter2 unify_equal ts1 ts2
     | TProd _, _ -> raise Cannot_unify
   in
   unify_int (Type.view tp1) (Type.view tp2)
 
+let rec unify_subtype supertype subtype =
+  match Type.view supertype, Type.view subtype with
+
+  | TArrow(tps1, tp1), TArrow(tps2, tp2) ->
+    unify_subarrow tps1 tp1 tps2 tp2
+  | TArrow _, _ -> raise Cannot_unify
+
+  | TProd(ts1), TProd(ts2) ->
+    List.iter2 unify_subtype ts1 ts2
+  | TProd _, _ -> raise Cannot_unify
+
+  | TUVar _, _
+  | _, TUVar _
+  | TGVar _, _
+  | _, TGVar _
+  | TADT _, _
+  | TVar _, _
+  | TUnit, _
+  | TEmpty, _
+  | TBool, _
+  | TInt, _ -> 
+    unify_equal supertype subtype
+
+and unify_subarrow tps1 tp1 tps2 tp2 =
+  let rec inner = function
+    | tp1' :: (_ :: _ as tps1), [tp2'] ->
+      unify_subtype tp2' tp1';
+      begin match Type.view tp2 with
+      | TArrow (tps2, tp2) ->
+        unify_subarrow tps1 tp1 tps2 tp2
+      | TGVar (x, Some (TArrow (tps2, tp2))) ->
+        unify_subarrow tps1 tp1 tps2 tp2
+      | TUVar x | TGVar (x, None) ->
+        unify_with_uvar x (Type.t_arrow tps1 tp1)
+      | _ -> raise Cannot_unify
+      end
+    | tp1' :: tps1, tp2' :: tps2 ->
+      unify_subtype tp2' tp1'; 
+      inner (tps1, tps2)
+    | [], [] ->
+      unify_subtype tp1 tp2
+    | _, []
+    | [], _ ->
+      raise Cannot_unify
+  in
+  inner (tps1,tps2)

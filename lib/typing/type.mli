@@ -8,7 +8,9 @@ module TVarMap : Map.S with type key = TVar.t
 module Level : sig
   type t
   val starting : t
-  val increase : t -> t
+  val increase_minor : t -> t
+  val increase_major : t -> t
+  val compare_major : t -> t -> int
   val compare : t -> t -> int
 end
 

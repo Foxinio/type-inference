@@ -21,7 +21,8 @@ val extend_var_name : t -> Imast.var_type -> string -> unit
 val lookup_var_name : t -> Imast.var_type -> string option
 val seq_of_var_name : t -> (Imast.var_type * string) Seq.t
 
-val increase_level : t -> t
+val increase_level_type : t -> t
+val increase_level_let : t -> t
 val fresh_uvar : t -> Type.t
 val fresh_gvar : t -> Type.t
 val instantiate : ?mapping:Type.t Type.TVarMap.t -> t -> Type.typ -> Type.t

@@ -5,7 +5,7 @@ open Type
 type t =
   { var_map  : tp VarMap.t;
     tvar_map : tvar TVarMap.t;
-    ctor_map : (tp*tp) VarMap.t;
+    ctor_map : (tp*name*tvar list) VarMap.t;
   }
 
 let empty =
@@ -21,8 +21,8 @@ let add_tvar env a =
   let b = TVar.fresh () in
   { env with tvar_map = TVarMap.add a b env.tvar_map}, b
 
-let add_ctor env ctor_name expected adt_tp =
-  { env with ctor_map = VarMap.add ctor_name (adt_tp, expected) env.ctor_map }
+let add_ctor env ctor_name expected adt_name adt_args =
+  { env with ctor_map = VarMap.add ctor_name (expected, adt_name, adt_args) env.ctor_map }
 
 
 let extend_var env lst =
@@ -36,8 +36,8 @@ let extend_tvar env lst =
   in
   List.fold_left f (env, []) lst
 
-let extend_ctor env lst adt_t =
-  let f env (name,tp) = add_ctor env name tp adt_t in
+let extend_ctors env lst name tvars =
+  let f env (name,tp) = add_ctor env name tp name tvars in
   List.fold_left f env lst
 
 
@@ -55,3 +55,7 @@ let lookup_ctor env x =
   match VarMap.find_opt x env.ctor_map with
   | None -> failwith "Internal error: unbound constructor"
   | Some tp -> tp
+
+
+let tvar_set env =
+  TVarMap.to_seq env.tvar_map |> Seq.map fst |> TVarSet.of_seq

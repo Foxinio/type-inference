@@ -1,7 +1,20 @@
 (** Utility functions, mostly error reporting *)
 
+let split_list xs n =
+  let rec inner acc = function
+  | xs, 0 -> List.rev acc, xs
+  | x :: xs, n -> inner (x :: acc) (xs, n - 1)
+  | [], _ -> failwith "split_list"
+  in
+  inner [] (xs, n)
+
+
 (** Exception that aborts the interpreter *)
+
+
 exception Fatal_error
+exception Internal_error
+
 
 (** Pretty-printer of locations *)
 let string_of_pp (start_p : Lexing.position) (end_p : Lexing.position) =
@@ -35,3 +48,9 @@ let report_error_pp start_p end_p fmt =
 (** report an error related to given AST node, and raise Fatal_error *)
 let report_error (node : ('a,'b) Ast.node) fmt =
   report_error_pp node.start_pos node.end_pos fmt
+
+let report_internal_error fmt =
+  Printf.kfprintf
+    (fun _ -> raise Internal_error)
+    stderr
+    ("internal error: " ^^ fmt ^^ "\n")

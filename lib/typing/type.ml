@@ -8,10 +8,15 @@ module TVarSet = TVar.MakeSet()
 module TVarMap = TVar.MakeMap()
 
 module Level = struct
-  type t = int
-  let starting = 0
-  let increase = (+) 1
-  let compare = compare
+  type t = int * int
+  let starting = 0, 0
+  let increase_minor (major,minor) = (major,minor+1)
+  let increase_major (major,minor) = (major+1,0)
+  let compare_major (major1,_) (major2,_) = compare major1 major2
+  let compare a b =
+    match compare_major a b with
+    | 0 -> compare (snd a) (snd b)
+    | n -> n
 end
 
 type t =
@@ -25,13 +30,14 @@ type t =
   | TIArrow  of t list * t
   | TIProd   of t list
 
-(* TODO: Change value from option to some kind of Either.t that
-   either keeps level or replaced type *)
+and uvar_value =
+  | Realised of t
+  | Unrealised of Level.t
+
 and uvar_struct = {
   id: UVar.t;
-  value: t option;
+  value: uvar_value;
   is_gvar: bool;
-  level: Level.t
 }
 and uvar = uvar_struct ref
 and view =
@@ -57,11 +63,10 @@ let t_pair tp1 tp2 = TIProd([tp1; tp2])
 let t_prod tps     = TIProd(tps)
 
 let makeUvar gvar level =
-  { value=None; id=UVar.fresh (); is_gvar=gvar; level }
+  { value=Unrealised level; id=UVar.fresh (); is_gvar=gvar; }
 let is_gvar {contents={is_gvar;_}} = is_gvar
 let set_gvar x v = x := { !x with is_gvar=v }
 let id_of_uvar {contents={id;_}} = id
-let lvl_of_uvar {contents={level;_}} = level
 
 let fresh_uvar level = TIUVar (ref (makeUvar false level))
 let fresh_gvar level = TIUVar (ref (makeUvar true level))
@@ -69,26 +74,26 @@ let fresh_tvar () = TIVar (TVar.fresh ())
 
 let rec view tp =
   let rec prune_uvar = function
-    | TIUVar ({contents={ value=Some tp;_}} as x) ->
+    | TIUVar ({contents={ value=Realised tp;_}} as x) ->
       let shortened = prune_uvar tp in
-      x := { !x with value=Some shortened };
+      x := { !x with value=Realised shortened };
       shortened
     | tp -> tp
   in
   let view_uvar x =
     match !x with
-    | {value=None; _} -> None
-    | {value=Some tp; _ } ->
+    | {value=Unrealised _; _} -> None
+    | {value=Realised tp; _ } ->
       let tp = prune_uvar tp in
-      x := { !x with value=Some tp };
+      x := { !x with value=Realised tp };
       Some (view tp)
   in
   match tp with
   | TIUVar x when is_gvar x ->
       TGVar (x, view_uvar x)
-  | TIUVar ({contents={value=Some _;_}} as x) ->
+  | TIUVar ({contents={value=Realised _;_}} as x) ->
       Option.get (view_uvar x)
-  | TIUVar ({contents={value=None;_}} as x) ->
+  | TIUVar ({contents={value=Unrealised _;_}} as x) ->
       TUVar x
   | TIVar x -> TVar x
   | TIADT (x, lvl, tps) -> TADT (x, lvl, tps)
@@ -105,8 +110,9 @@ exception Cannot_compare of t * t
 
 let rec iter f : t -> unit =
   let default t = match t with
-    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=None;_}}) -> ()
-    | TIUVar ({contents={value=Some tp;_}}) ->
+    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _
+    | TIUVar ({contents={value=Unrealised _;_}}) -> ()
+    | TIUVar ({contents={value=Realised tp;_}}) ->
       iter f tp
     | TIADT (_, _, tps) ->
        List.iter (iter f) tps
@@ -119,24 +125,26 @@ let rec iter f : t -> unit =
   f default
 
 let rec set_uvar x tp =
-  lower_uvar_level x tp;
+  begin match !x with
+  | {value=Unrealised level; _} ->
+    lower_uvar_level level x tp
+  | _ -> ()
+  end;
   match !x with
-  | {value=None; is_gvar;_} ->
-    x := {!x with value=Some tp }
-  | {value=Some tp_current; is_gvar=true;_} ->
+  | {value=Unrealised _; _} ->
+    x := {!x with value=Realised tp }
+  | {value=Realised tp_current; is_gvar=true;_} ->
       let res = reconstruct tp tp_current in
-      x := { !x with value=Some res }
-  | { value=Some _;_ } ->
+      x := { !x with value=Realised res }
+  | { value=Realised _;_ } ->
      assert false
 
-and lower_uvar_level ({contents={level=level';_}} as x : uvar) tp =
-  let rec helper default = function
-    | TIUVar ({contents={ level; value=None;_}} as x) when level' < level ->
-      x := { !x with level=level' };
-    | TIUVar ({contents={ level; value=Some tp;_}} as x) when level' < level ->
-      x:= { !x with level=level' };
-      helper default tp;
-    | TIADT (_, level, _) when level > level' ->
+and lower_uvar_level level' x tp =
+  let helper default = function
+    | TIUVar ({contents={ value=Unrealised level;_}} as x)
+        when Level.compare level' level < 0 ->
+      x := { !x with value=Unrealised level' };
+    | TIADT (_, level, _) when Level.compare level level' > 0->
       raise (Cannot_compare (tp, (TIUVar x)))
     | tp -> default tp
   in iter helper tp
@@ -145,7 +153,6 @@ and reconstruct (new_tp : t) (current_tp : t) =
   let rec reconstruct_arrows (tpsa, resa) (tpsb, resb) =
     match tpsa, tpsb with
     | tpa :: tpsa, tpb :: tpsb ->
-        (* because arguments in arrows are contravariant these are reversed *)
         let tp = reconstruct tpb tpa in
         let rest, res = reconstruct_arrows (tpsa, resa) (tpsb, resb) in
         tp :: rest, res
@@ -158,12 +165,12 @@ and reconstruct (new_tp : t) (current_tp : t) =
   in
   let uvar_map x tp fn =
     match !x with
-      | {value=None;_} ->
-        x := { !x with value=Some tp };
+      | {value=Unrealised _;_} ->
+        x := { !x with value=Realised tp };
         tp
-      | {value=Some tp;_} ->
+      | {value=Realised tp;_} ->
         let res = fn tp in
-        x := { !x with value=Some res };
+        x := { !x with value=Realised res };
         res
   in
   let _ =
@@ -174,8 +181,9 @@ and reconstruct (new_tp : t) (current_tp : t) =
     | _ -> ()
   in
   match new_tp, current_tp with
-  | TIUVar x, TIADT (_, adt_lvl, _)
-  | TIADT (_, adt_lvl, _), TIUVar x when adt_lvl > lvl_of_uvar x ->
+  | TIUVar ({contents={value=Unrealised uvar_lvl;_}}), TIADT (_, adt_lvl, _)
+  | TIADT (_, adt_lvl, _), TIUVar ({contents={value=Unrealised uvar_lvl;_}})
+      when Level.compare adt_lvl uvar_lvl > 0 ->
     raise (Cannot_compare (new_tp, current_tp))
 
   | TIUVar x, _ ->
@@ -194,9 +202,11 @@ and reconstruct (new_tp : t) (current_tp : t) =
       raise (Cannot_compare (new_tp, current_tp))
 
   | TIADT (new_adt, new_lvl, new_tps),
-    TIADT (cur_adt, cur_lvl, cur_tps) when IMAstVar.compare new_adt cur_adt = 0 ->
+    TIADT (cur_adt, cur_lvl, cur_tps)
+      when IMAstVar.compare new_adt cur_adt = 0 ->
       assert (cur_lvl==new_lvl);
-      TIADT (new_adt, new_lvl, List.map2 reconstruct new_tps cur_tps)
+      assert (new_tp = current_tp);
+      TIADT (new_adt, new_lvl, new_tps)
   | TIADT _, _ ->
     raise (Cannot_compare (new_tp, current_tp))
 
@@ -215,6 +225,7 @@ and reconstruct (new_tp : t) (current_tp : t) =
       TIProd (List.map2 reconstruct ts1 ts2)
   | TIProd _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
+
 let t_of_uvar { contents={value;_} } = value
 let uvar_compare { contents={id=id1;_}} { contents={id=id2;_}} = UVar.compare id1 id2
 
@@ -224,10 +235,11 @@ module UVarSet = Set.Make(struct
 end)
 
 
+
 let rec fold_map f init =
   let default acc t = match t with
-    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=None;_}}) -> acc, t
-    | TIUVar ({contents={value=Some tp;_}} as x) ->
+    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=Unrealised _;_}}) -> acc, t
+    | TIUVar ({contents={value=Realised tp;_}} as x) ->
       let acc, tp = fold_map f acc tp in
       set_uvar x tp;
       acc, TIUVar x
@@ -248,8 +260,8 @@ let rec fold_map f init =
 
 let rec map f : t -> t =
   let default t = match t with
-    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=None;_}}) -> t
-    | TIUVar ({contents={value=Some tp;_}} as x) ->
+    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=Unrealised _;_}}) -> t
+    | TIUVar ({contents={value=Realised tp;_}} as x) ->
       set_uvar x (map f tp);
       TIUVar x
     | TIADT (name, lvl, tps) ->
@@ -264,10 +276,10 @@ let rec map f : t -> t =
 
 let rec foldr f t init =
   let rec default init t = match t with
-    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=None;_}}) -> init
+    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=Unrealised _;_}}) -> init
     | TIADT (_, _, tps) ->
       List.fold_right (foldr f) tps init
-    | TIUVar ({contents={value=Some tp;_}}) ->
+    | TIUVar ({contents={value=Realised tp;_}}) ->
       f default (foldr f tp init) tp
     | TIProd tps ->
       List.fold_right (foldr f) tps init
@@ -278,10 +290,10 @@ let rec foldr f t init =
 
 let rec foldl f init t =
   let rec default init t = match t with
-    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=None;_}}) -> init
+    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=Unrealised _;_}}) -> init
     | TIADT (_, _, tps) ->
       List.fold_left (foldl f) init tps
-    | TIUVar ({contents={value=Some tp;_}}) ->
+    | TIUVar ({contents={value=Realised tp;_}}) ->
       foldl f (f default init tp) tp
     | TIProd tps ->
       List.fold_left (foldl f) init tps
@@ -290,6 +302,14 @@ let rec foldl f init t =
   in
   foldl f (f default init t) t
 
+let degeneralize_uvars tp =
+  let rec helper default = function
+    | TIUVar {contents={value=Realised tp;_}} -> helper default tp
+    | TIUVar ({contents={value=Unrealised _;_}} as x) ->
+      x := { !x with is_gvar=false };
+      TIUVar x
+    | tp -> default tp in
+  map helper tp
 
 type typ =
   | Mono of t
@@ -321,9 +341,6 @@ let instantiate ?(mapping=TVarMap.empty) level = function
       in map instantiate tp
 
 let generalize accepted_level tp =
-  (* TODO: Change it so that generalization isn't dependent
-      on uvar not being on blacklist, but instead take apropiate level
-      and generalize only if uvar is on that particular level *)
   let module UVartbl = UVar.MakeHashtbl() in
   let mapper = UVartbl.create 11 in
   let lookup x =
@@ -335,11 +352,11 @@ let generalize accepted_level tp =
       v
   in
   let rec helper default tp = match tp with
-    | TIUVar ({contents={value=Some _; is_gvar=true; level; _}} as x)
-        when level >= accepted_level ->
+    | TIUVar ({contents={value=Realised _; is_gvar=true; _}} as x) ->
       set_gvar x false;
       helper default tp
-    | TIUVar ({contents={value=None; level;_}} as x) when level = accepted_level ->
+    | TIUVar ({contents={value=Unrealised level;_}} as x)
+        when Level.compare_major level accepted_level = 0 ->
       TIVar (lookup (id_of_uvar x))
     | tp -> default tp
   in 

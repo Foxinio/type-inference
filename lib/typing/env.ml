@@ -24,7 +24,10 @@ let of_var_names var_name =
 
 
 (* uvar levels *)
-let increase_level({ level;_} as env) = { env with level=Level.increase level }
+let increase_level_type ({ level;_} as env) =
+  { env with level=Level.increase_minor level }
+let increase_level_let ({ level;_} as env) =
+  { env with level=Level.increase_major level }
 
 let fresh_uvar {level;_} = Type.fresh_uvar level
 let fresh_gvar {level;_} = Type.fresh_gvar level

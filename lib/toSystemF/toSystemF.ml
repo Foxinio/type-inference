@@ -2,7 +2,10 @@ open Core
 open Imast
 
 module SystemF = System_f.Type
+module Coerse = SystemF.Coerse
 open Typing
+
+let unimplemented () = failwith "Unimplemented"
 
 let rec tr_type env (tp : Type.t) : SystemF.tp =
   let open Type in
@@ -47,7 +50,16 @@ let rec tr_expr env (e : Schema.typ expr) : SystemF.expr =
     SystemF.EFix(f, lst, tpres, tr_expr env e)
 
   | Imast.EApp(e1, es) ->
-    SystemF.EApp (tr_expr env e1, List.map (tr_expr env) es)
+    let rec inner e1 es tp = 
+      begin match Type.view tp with
+      | Type.TArrow (tps, tpres) ->
+        let es, es' = Utils.split_list es (List.length tps) in
+        let es = List.map2 (add_coersion env) es tps in
+        let e1' = SystemF.EApp (e1, es) in
+        inner e1' es' tpres
+      | _ -> failwith "internal error"
+      end in
+    inner (tr_expr env e1) es @@ Schema.get_template e1.typ
 
   | Imast.ELet((x, tp), e1, e2) ->
     let env', tvars = Env.extend_tvar env @@ TVarSet.to_list @@ Schema.get_arguments tp in
@@ -71,11 +83,9 @@ let rec tr_expr env (e : Schema.typ expr) : SystemF.expr =
   | Imast.EType ((alias, _), ((_, typ) :: _ as ctor_defs), rest) ->
     let env', tvars = Env.extend_tvar env @@ TVarSet.to_list @@ Schema.get_arguments typ in
     let ctor_defs' = List.map (tr_var env') ctor_defs in
-    let tvars' = List.map (fun a -> SystemF.TVar a) tvars in
-    let adt_t = SystemF.TForallT (tvars, SystemF.TADT (alias, tvars')) in
-    SystemF.EType(adt_t, ctor_defs', tr_expr env rest)
+    SystemF.EType(alias, tvars, ctor_defs', tr_expr env rest)
   | Imast.EType ((alias,_), [], rest) ->
-    SystemF.EType(SystemF.TADT(alias,[]), [], tr_expr env rest)
+    SystemF.EType(alias,[], [], tr_expr env rest)
 
   | Imast.ECtor (name, body) ->
     SystemF.ECtor (name, tr_expr env body)
@@ -85,10 +95,82 @@ let rec tr_expr env (e : Schema.typ expr) : SystemF.expr =
     tr_expr env rest
 
   | Imast.EMatch (sub_expr, clauses) ->
-    let tp = Schema.get_template sub_expr.typ |> tr_type env in
+    let tp = Schema.get_template e.typ |> tr_type env in
     let f (ctor,(x,_),e) = ctor, x, tr_expr env e in
     let clauses' = List.map f clauses in
-    SystemF.EMatch(tr_expr env sub_expr, tp, clauses')
+    SystemF.EMatch(tr_expr env sub_expr, clauses', tp)
+
+  and add_coersion env (e1 : Schema.typ Imast.expr) tp =
+    let coerse = build_coersion env (Schema.get_template e1.typ) tp in
+    match Coerse.is_id coerse with
+    | true -> tr_expr env e1
+    | false -> SystemF.ECoerse (coerse, tr_expr env e1)
+
+  and build_coersion env tp_from tp_to =
+      let opt_cons = function
+        | None, _  | _, None -> None
+        | Some lst, Some tp -> Some (tp :: lst) in
+      let fold_coers known =
+        let rec inner (acc1, acc2) tps1 tps2 =
+          match tps1, tps2 with
+          | tp1 :: tps1, tp2 :: tps2 ->
+            let c = build_coersion env tp1 tp2 in
+            inner (opt_cons (acc1, Coerse.unwrap_id c), c :: acc2) tps1 tps2
+          | [], [] ->
+            begin match acc1 with
+            | Some acc1 -> Either.Left (List.rev acc1)
+            | None -> Either.Right (List.rev acc2)
+            end
+          | _ -> failwith "internal error" in
+          let acc = if known then Some [] else None in
+          inner (acc, [])
+      in
+    match Type.view tp_from, Type.view tp_to with
+    | (Type.TGVar (_, _) | Type.TUVar _), _ ->
+      failwith "Unification variable unrealized"
+
+    | Type.TUnit, Type.TUnit
+    | Type.TBool, Type.TBool
+    | Type.TInt, Type.TInt -> SystemF.CId (tr_type env tp_to)
+
+    | Type.TVar x, Type.TVar y when TVar.compare x y = 0 ->
+      SystemF.CId (tr_type env tp_from)
+
+    (*TODO: reverse *)
+    | _, Type.TEmpty ->
+      SystemF.CBot (tr_type env tp_from)
+
+    | Type.TADT (name_from, _, args_from), Type.TADT (name_to, _, args_to) when name_from = name_to ->
+      assert (List.for_all2 Equal.type_equal args_from args_to);
+      SystemF.CId (tr_type env tp_to)
+
+    | Type.TArrow (tps_from, tpres_from), Type.TArrow (tps_to, tpres_to) ->
+      let len_from, len_to = List.length tps_from, List.length tps_to in
+      if len_from = len_to then
+        let coerse_res = build_coersion env tpres_from tpres_to in
+        match fold_coers (Coerse.is_id coerse_res) tps_from tps_to with
+        | Either.Left tps ->
+          SystemF.CId (SystemF.TArrow (tps, Coerse.unwrap_id coerse_res |> Option.get))
+        | Either.Right coers ->
+          SystemF.CArrow (coers, coerse_res)
+      else if len_from < len_to then
+        let tps_to, tps_to' = Utils.split_list tps_to len_from in
+        let coers = fold_coers false tps_from tps_to
+          |> Either.fold ~left:(fun _ -> assert false) ~right:Fun.id in
+        SystemF.CSubArrow (coers, build_coersion env tpres_from (Type.t_arrow tps_to' tpres_to))
+      else
+        failwith "internal error"
+
+    | Type.TProd tps_from, Type.TProd tps_to ->
+      begin match fold_coers true tps_from tps_to with
+        | Either.Left tps ->
+          SystemF.CId (SystemF.TProd tps)
+        | Either.Right coers ->
+          SystemF.CProd coers
+      end
+
+    | (Type.TUnit | Type.TBool | Type.TInt | Type.TVar _| Type.TADT _ | Type.TArrow _ | Type.TProd _ | Type.TEmpty), _ ->
+      failwith "internal error"
 
 
 let tr_program ((p,_) : program) : SystemF.program =
