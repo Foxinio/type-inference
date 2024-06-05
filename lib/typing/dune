@@ -1,4 +1,4 @@
 (library
  (name typing)
- (libraries core))
+ (libraries core type))
 

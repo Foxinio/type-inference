@@ -45,20 +45,10 @@ val t_pair   : t -> t -> t
 val t_prod   : t list -> t
 
 val view  : t -> view
+
 val map   : ((t -> t) -> t -> t) -> t -> t
 val iter  : ((t -> unit) -> t -> unit) -> t -> unit
-
-(** The same way fold_left starts from the begining of the list and makes it way inside,
-      `fold_left f init [b1; ...; bn]` is `f (... (f (f init b1) b2) ...) bn`
-    foldl on trees works top-down. *)
 val foldl : (('a -> t -> 'a) -> 'a -> t -> 'a) -> 'a -> t -> 'a
-
-(** The same way fold_right starts from the end of the list and makes it way outside,
-      `fold_right f [a1; ...; an] init` is `f a1 (f a2 (... (f an init) ...))`
-    foldr on trees works bottom-up. Not tail-recursive. *)
-val foldr : (('a -> t -> 'a) -> 'a -> t -> 'a) -> t -> 'a -> 'a
-
-val fold_map : (('a -> t -> 'a * t) -> 'a -> t -> 'a * t) -> 'a -> t -> 'a * t
 
 val set_uvar : uvar -> t -> unit
 val uvar_compare : uvar -> uvar -> int
@@ -66,13 +56,15 @@ val uvar_compare : uvar -> uvar -> int
 
 exception Cannot_compare of t * t
 
-type typ
+module Schema : sig
+  type typ
 
-val typ_mono : t -> typ
-val typ_schema : TVarSet.t -> t -> typ
+  val typ_mono : t -> typ
+  val typ_schema : TVarSet.t -> t -> typ
 
-val instantiate : ?mapping:t TVarMap.t -> Level.t -> typ -> t
-val generalize : Level.t -> t -> typ
+  val instantiate : ?mapping:t TVarMap.t -> Level.t -> typ -> t
+  val generalize : Level.t -> t -> typ
 
-val get_arguments : typ -> TVarSet.t
-val get_template : typ -> t
+  val get_arguments : typ -> TVarSet.t
+  val get_template : typ -> t
+end

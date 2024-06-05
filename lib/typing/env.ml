@@ -5,9 +5,9 @@ open Imast
 module VarMap = IMAstVar.MakeMap()
 
 type t = {
-  gamma: Type.typ VarMap.t;
-  ctors: (Type.typ * Type.typ) VarMap.t;
-  delta: Type.typ VarMap.t;
+  gamma: Schema.typ VarMap.t;
+  ctors: (Schema.typ * Schema.typ) VarMap.t;
+  delta: Schema.typ VarMap.t;
   var_name: string VarTbl.t;
   level: Level.t;
 }
@@ -40,10 +40,10 @@ let wrap_gvar env tp =
   | _ -> assert false
 
 let instantiate ?(mapping=TVarMap.empty) {level;_} typ =
-  Type.instantiate ~mapping level typ
+  Schema.instantiate ~mapping level typ
 
 let generalize {level;_} tp =
-  Type.generalize level tp
+  Schema.generalize level tp
 
 
 (* Gamma *)
@@ -61,7 +61,7 @@ let lookup_gamma {gamma; level; _} x =
 
 let extend_by_ctors ({ctors; level;_} as env) lst alias_name alias_args set =
   let adt_t = Type.t_adt alias_name level alias_args in
-  let adt_typ = Type.typ_schema set adt_t in
+  let adt_typ = Schema.typ_schema set adt_t in
   let f (var, typ) = (var, (typ, adt_typ)) in
   let seq = List.map f lst |> List.to_seq in
   { env with ctors =
@@ -81,14 +81,14 @@ let extend_delta_with_alias ({delta;_} as env) (name, typ) =
 
 let extend_delta_with_adt ({delta; level;_} as env) name lst set =
   let adt_t = Type.t_adt name level lst in
-  let adt_typ = Type.typ_schema set adt_t in
+  let adt_typ = Schema.typ_schema set adt_t in
   { env with delta =
     VarMap.add name adt_typ delta
   }
 
 let extend_delta_of_list ({delta;_} as env) lst =
   let seq = List.map
-    (fun (x,t) -> x, Type.typ_mono t) lst
+    (fun (x,t) -> x, Schema.typ_mono t) lst
     |> List.to_seq in
   { env with delta =
     VarMap.add_seq seq delta

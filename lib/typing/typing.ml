@@ -7,7 +7,8 @@ module TVar = Type.TVar
 module TVarSet = Type.TVarSet
 module TVarMap = Type.TVarMap
 
-module Schema = Type
+module Schema = Schema
+
 module Type = Type
 module PrettyPrint = PrettyPrinter
 module Level = Type.Level
