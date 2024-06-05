@@ -37,6 +37,14 @@ and uvar_value =
 and uvar_struct = {
   id: UVar.t;
   value: uvar_value;
+
+  (* gvar set means that it was created in abstraction application,
+   *   is an arrow and can be generalised to arrow that takes more arguments.
+   *
+   * (τ1, τ2) -> (τ3, τ4) -> τ5
+   *    =>
+   * (τ1, τ2, τ3, τ4) -> τ5
+   *)
   is_gvar: bool;
 }
 and uvar = uvar_struct ref
@@ -57,8 +65,8 @@ let t_empty = TIEmpty
 let t_bool  = TIBool
 let t_int   = TIInt
 let t_var x = TIVar x
-let t_arrow  tps tp2 = TIArrow(tps, tp2)
-let t_adt name level tps   = TIADT(name, level, tps)
+let t_arrow tps tp2 = TIArrow(tps, tp2)
+let t_adt name level tps = TIADT(name, level, tps)
 let t_pair tp1 tp2 = TIProd([tp1; tp2])
 let t_prod tps     = TIProd(tps)
 
@@ -124,6 +132,8 @@ let rec iter f : t -> unit =
   in
   f default
 
+
+
 let rec set_uvar x tp =
   begin match !x with
   | {value=Unrealised level; _} ->
@@ -134,10 +144,10 @@ let rec set_uvar x tp =
   | {value=Unrealised _; _} ->
     x := {!x with value=Realised tp }
   | {value=Realised tp_current; is_gvar=true;_} ->
-      let res = reconstruct tp tp_current in
+      let res = join tp tp_current in
       x := { !x with value=Realised res }
   | { value=Realised _;_ } ->
-     assert false
+     failwith "tried to set realised uvar"
 
 and lower_uvar_level level' x tp =
   let helper default = function
@@ -149,49 +159,40 @@ and lower_uvar_level level' x tp =
     | tp -> default tp
   in iter helper tp
 
-and reconstruct (new_tp : t) (current_tp : t) =
-  let rec reconstruct_arrows (tpsa, resa) (tpsb, resb) =
-    match tpsa, tpsb with
-    | tpa :: tpsa, tpb :: tpsb ->
-        let tp = reconstruct tpb tpa in
-        let rest, res = reconstruct_arrows (tpsa, resa) (tpsb, resb) in
-        tp :: rest, res
-    | [], _ :: _ ->
-        [], reconstruct resa (TIArrow (tpsb, resb))
-    | _ :: _, [] ->
-        [], reconstruct (TIArrow (tpsa, resa)) resb
-    | [], [] ->
-        [], reconstruct resa resb
-  in
-  let uvar_map x tp fn =
-    match !x with
-      | {value=Unrealised _;_} ->
-        x := { !x with value=Realised tp };
-        tp
-      | {value=Realised tp;_} ->
-        let res = fn tp in
-        x := { !x with value=Realised res };
-        res
-  in
-  let _ =
-    match new_tp, current_tp with
-    | TIUVar x, TIUVar y when is_gvar x || is_gvar y ->
-      set_gvar x true;
-      set_gvar y true
-    | _ -> ()
-  in
+(* Join operation
+ * (τ₁, τ₂) -> (τ₃) -> τ₄
+ *    ⊔
+ * (τ₁) -> (τ₂, τ₃) -> τ₄
+ *    =>
+ * (τ₁) -> (τ₂) -> (τ₃) -> τ₄
+ *
+ *)
+and join (new_tp : t) (current_tp : t) =
+  (* TODO: make sure this is correct *)
+  (* this is not correct, because all we know is that overhead uvar can be generalised,
+     however we know nothing about uvar at this stage
+   *)
+  (* begin match new_tp, current_tp with *)
+  (*   | TIUVar x, TIUVar y when is_gvar x || is_gvar y -> *)
+  (*     set_gvar x true; *)
+  (*     set_gvar y true *)
+  (*   | _ -> () *)
+  (* end; *)
   match new_tp, current_tp with
+
+  (* when we try to unify UVar and ADT with higher level
+     we should get an error *)
   | TIUVar ({contents={value=Unrealised uvar_lvl;_}}), TIADT (_, adt_lvl, _)
   | TIADT (_, adt_lvl, _), TIUVar ({contents={value=Unrealised uvar_lvl;_}})
       when Level.compare adt_lvl uvar_lvl > 0 ->
     raise (Cannot_compare (new_tp, current_tp))
 
   | TIUVar x, _ ->
-    uvar_map x current_tp (fun tp -> reconstruct tp current_tp)
+    join_with_uvar x (Either.Right current_tp)
   | _, TIUVar x ->
-    uvar_map x new_tp (fun tp -> reconstruct new_tp tp)
+    join_with_uvar x (Either.Left new_tp)
 
-  | _, TIUnit    -> TIUnit
+  | TIUnit, TIUnit    -> TIUnit
   | TIUnit, _ -> raise (Cannot_compare (new_tp, current_tp))
 
   | TIEmpty, _     -> TIEmpty
@@ -204,7 +205,7 @@ and reconstruct (new_tp : t) (current_tp : t) =
   | TIADT (new_adt, new_lvl, new_tps),
     TIADT (cur_adt, cur_lvl, cur_tps)
       when IMAstVar.compare new_adt cur_adt = 0 ->
-      assert (cur_lvl==new_lvl);
+      assert (cur_lvl = new_lvl);
       assert (new_tp = current_tp);
       TIADT (new_adt, new_lvl, new_tps)
   | TIADT _, _ ->
@@ -217,13 +218,51 @@ and reconstruct (new_tp : t) (current_tp : t) =
 
   | TIArrow (tpsa, tp_resa),
     TIArrow (tpsb, tp_resb) ->
-      let args, res = reconstruct_arrows (tpsa, tp_resa) (tpsb, tp_resb) in
+      let args, res = join_arrows (tpsa, tp_resa) (tpsb, tp_resb) in
       t_arrow args res
   | TIArrow _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
   | TIProd(ts1), TIProd(ts2) when List.length ts1 = List.length ts2 ->
-      TIProd (List.map2 reconstruct ts1 ts2)
+      TIProd (List.map2 join ts1 ts2)
   | TIProd _, _ -> raise (Cannot_compare (new_tp, current_tp))
+
+and join_arrows (tpsa, resa) (tpsb, resb) =
+  match tpsa, tpsb with
+  | tpa :: tpsa, tpb :: tpsb ->
+      let tp = join tpb tpa in
+      let rest, res = join_arrows (tpsa, resa) (tpsb, resb) in
+      tp :: rest, res
+  | [], _ :: _ ->
+      begin match join resa (TIArrow (tpsb, resb)) with
+      | TIArrow (tps, tpres) -> tps, tpres
+      | tpres -> [], tpres
+      end
+  | _ :: _, [] ->
+      begin match join (TIArrow (tpsa, resa)) resb with
+      | TIArrow (tps, tpres) -> tps, tpres
+      | tpres -> [], tpres
+      end
+  | [], [] ->
+      [], join resa resb
+
+and join_with_uvar ?(loop=false) x tp =
+  match !x, tp with
+    | {value=Unrealised _;_}, Right tp
+    | {value=Unrealised _;_}, Left tp ->
+      x := { !x with value=Realised tp };
+      tp
+    | {value=Realised new_tp; is_gvar=true;_}, Right current_tp
+    | {value=Realised current_tp; is_gvar=true;_}, Left new_tp ->
+      let res = join new_tp current_tp in
+      x := { !x with value=Realised res };
+      res
+    | {value=Realised _; is_gvar=false;_}, Left (TIUVar y) when not loop ->
+        join_with_uvar y ~loop:true (Right (TIUVar x))
+    | {value=Realised _; is_gvar=false;_}, Right (TIUVar y) when not loop ->
+        join_with_uvar y ~loop:true (Left (TIUVar x))
+    | {value=Realised _; is_gvar=false;_}, _ ->
+      failwith "tried join on non gvar"
+
 
 
 let t_of_uvar { contents={value;_} } = value
@@ -256,7 +295,7 @@ let rec fold_map f init =
   in
   f default init
 
-  
+
 
 let rec map f : t -> t =
   let default t = match t with

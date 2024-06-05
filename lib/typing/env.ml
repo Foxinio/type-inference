@@ -24,13 +24,20 @@ let of_var_names var_name =
 
 
 (* uvar levels *)
-let increase_level_type ({ level;_} as env) =
+let increase_level_minor ({ level;_} as env) =
   { env with level=Level.increase_minor level }
-let increase_level_let ({ level;_} as env) =
+let increase_level_major ({ level;_} as env) =
   { env with level=Level.increase_major level }
 
 let fresh_uvar {level;_} = Type.fresh_uvar level
 let fresh_gvar {level;_} = Type.fresh_gvar level
+let wrap_gvar env tp =
+  let res = fresh_gvar env in
+  match Type.view res with
+  | TGVar (gvar, _) ->
+    Type.set_uvar gvar tp;
+    res
+  | _ -> assert false
 
 let instantiate ?(mapping=TVarMap.empty) {level;_} typ =
   Type.instantiate ~mapping level typ
@@ -93,7 +100,7 @@ let lookup_delta {delta;_} name = VarMap.find_opt name delta
 
 let extend_var_name {var_name;_} x name = VarTbl.add var_name x name
 
-let lookup_var_name {var_name;_} x = VarTbl.find_opt var_name x
+let lookup_var_name ?(default="<unknown>") {var_name;_} x = VarTbl.find_opt var_name x |> Option.value ~default
 
 let seq_of_var_name {var_name;_} = VarTbl.to_seq var_name
 
