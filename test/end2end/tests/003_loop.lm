@@ -1,0 +1,4 @@
+let rec f x = f x
+
+let _ = f ()
+//@ loops: true

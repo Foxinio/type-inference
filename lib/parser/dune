@@ -1,5 +1,5 @@
 (library
- (name parser)
+ (name core_parser)
  (libraries core))
 
 

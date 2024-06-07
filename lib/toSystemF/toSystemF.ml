@@ -173,7 +173,7 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
           SystemF.CPair (coers1, coers2)
       end
 
-    | (Type.TUnit | Type.TBool | Type.TInt | Type.TVar _| Type.TADT _ | Type.TArrow _ | Type.TPair _ | Type.TEmpty), _ ->
+    | (Type.TUnit | Type.TBool | Type.TInt | Type.TVar _| Type.TADT _ | Type.TArrow _ | Type.TPair _), _ ->
       failwith "internal error"
 
 

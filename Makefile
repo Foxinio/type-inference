@@ -10,17 +10,17 @@ watch:
 	dune build --watch
 
 test: build
-	dune runtest
+	@test/end2end/test.sh .
 
 tex:
-	$(MAKE) -C tex
+	latexmk -C tex
 
 clean:
-		latexmk -c
-		dune clean
-		rm -f paper.pdf
-		$(MAKE) -C tex clean
+	latexmk -c
+	dune clean
+	rm -f paper.pdf
+	latexmk -C tex clean
 
 clean-all:
-		latexmk -C
-		$(MAKE) -C tex clean-all
+	latexmk -C
+	latexmk -C tex clean-all

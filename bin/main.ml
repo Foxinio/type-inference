@@ -9,7 +9,7 @@ let check_invariant f p =
 
 let pipeline (fname : string) =
   let _ = fname
-  |> Parser.parse_file
+  |> Core_parser.parse_file
   |> Imast.translate_to_IMAst
   |> Typing.infer
   |> ToSystemF.tr_program
