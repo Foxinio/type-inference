@@ -28,9 +28,9 @@ let rec type_equal tp1 tp2 =
     type_equal tp1 tp2 && List.for_all2 type_equal tps1 tps2
   | TArrow _, _ -> false
 
-  | TProd tps1, TProd tps2 ->
-    List.for_all2 type_equal tps1 tps2
-  | TProd _, _ -> false
+  | TPair (tp1a, tp1b), TPair (tp2a, tp2b) ->
+    type_equal tp1a tp2a && type_equal tp1b tp2b
+  | TPair _, _ -> false
 
   | TADT (a1, _, tps1), TADT (a2, _, tps2) when IMAstVar.compare a1 a2 = 0 ->
     List.for_all2 type_equal tps1 tps2

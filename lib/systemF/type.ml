@@ -1,4 +1,4 @@
-(** System F Type and Expr definitions *)
+(* System F Type and Expr definitions *)
 
 open Core
 open Imast
@@ -22,14 +22,14 @@ type tp =
   | TArrow   of tp list * tp
   | TADT     of adtvar * tp list
   | TForallT of tvar list * tp
-  | TProd    of tp list
+  | TPair    of tp * tp
 
 type coersion =
-  | CId of tp
-  | CBot of tp
-  | CArrow of coersion list * coersion
-  | CForallT of tvar list * coersion
-  | CProd   of coersion list
+  | CId       of tp
+  | CBot      of tp
+  | CArrow    of coersion list * coersion
+  | CForallT  of tvar list * coersion
+  | CPair     of coersion * coersion
   | CSubArrow of coersion list * coersion
 
 type expr =
@@ -54,7 +54,7 @@ type expr =
   | EType   of name * tvar list * ctor_def list * expr
   | ECtor   of name * expr
 
-  (** tp is type of `match expr with clauses` *)
+  (* tp is type of `match expr with clauses` *)
   | EMatch  of expr * clause list * tp
 
 
@@ -82,9 +82,10 @@ module Coerse = struct
     | CForallT (vars, c) ->
       let tp1, tp2 = rebuild c in
       TForallT (vars, tp1), TForallT (vars, tp2)
-    | CProd (cps) ->
-      let tps1, tps2 = List.split @@ List.map rebuild cps in
-      TProd (tps1), TProd (tps2)
+    | CPair (c1, c2) ->
+      let tp1a, tp2a = rebuild c1 in
+      let tp1b, tp2b = rebuild c2 in
+      TPair (tp1a, tp1b), TPair (tp2a, tp2b)
     | CSubArrow (cps, c) ->
       (* TODO: make sure this is correct *)
       (* - on paper it does *)

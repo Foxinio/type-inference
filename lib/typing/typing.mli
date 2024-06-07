@@ -56,7 +56,7 @@ module Type : sig
     | TGVar   of uvar * view option
     | TUVar   of uvar
     | TArrow  of t list * t
-    | TProd   of t list
+    | TPair   of t * t
 
   val view  : t -> view
 
@@ -68,7 +68,6 @@ module Type : sig
   val t_arrow  : t list -> t -> t
   val t_adt    : IMAstVar.t -> Level.t -> t list -> t
   val t_pair   : t -> t -> t
-  val t_prod   : t list -> t
 
   exception Cannot_compare of t * t
 

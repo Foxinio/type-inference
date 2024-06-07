@@ -14,8 +14,8 @@ let rec check_well_scoped env tp =
   | TForallT(a, tp) ->
     let (env, a) = Env.extend_tvar env a in
     TForallT(a, check_well_scoped env tp)
-  | TProd(tps) ->
-    TProd(List.map (check_well_scoped env) tps)
+  | TPair(tp1, tp2) ->
+    TPair(check_well_scoped env tp1, check_well_scoped env tp2)
   | TADT(a, tps) ->
     TADT(a, List.map (check_well_scoped env) tps)
 
@@ -75,17 +75,17 @@ let rec infer_type env e =
   | EPair(e1, e2) ->
     let tp1 = infer_type env e1 in
     let tp2 = infer_type env e2 in
-    TProd([tp1; tp2])
+    TPair(tp1, tp2)
 
   | EFst e ->
     begin match infer_type env e with
-    | TProd(tp1 :: _) -> tp1
+    | TPair (tp1, _) -> tp1
     | _ -> failwith "Internal type error"
     end
 
   | ESnd e ->
     begin match infer_type env e with
-    | TProd(_ :: tp2 :: _) -> tp2
+    | TPair(_, tp2) -> tp2
     | _ -> failwith "Internal type error"
     end
 

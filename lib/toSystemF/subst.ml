@@ -17,11 +17,13 @@ let get_subst template instance =
     end
     | TArrow (tps1, tp1), TArrow (tps2, tp2) ->
       inner (List.fold_left2 inner mapping tps1 tps2) tp1 tp2
-    | TProd tps1, TProd tps2 ->
-      List.fold_left2 inner mapping tps1 tps2
+    | TPair (tp1a, tp1b), TPair (tp2a, tp2b) ->
+      let mapping = inner mapping tp1a tp2a in
+      let mapping = inner mapping tp1b tp2b in
+      mapping
     | TADT (a1, _, tps1), TADT (a2, _, tps2) when Imast.IMAstVar.compare a1 a2 = 0 ->
       List.fold_left2 inner mapping tps1 tps2
-    | (TUnit | TBool | TInt | TEmpty | TArrow _ | TProd _ | TADT _), _ ->
+    | (TUnit | TBool | TInt | TEmpty | TArrow _ | TPair _ | TADT _), _ ->
       failwith "internal error"
   in
   inner TVarMap.empty template instance

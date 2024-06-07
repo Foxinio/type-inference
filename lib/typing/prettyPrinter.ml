@@ -76,10 +76,12 @@ let rec pp_type ctx lvl tp =
     | TArrow(tps, tp2) ->
       pp_at_level 0 lvl
         (Printf.sprintf "%s -> %s" (pp_list "," ctx 1 tps) (pp_type ctx 0 tp2))
-    | TProd(tps) ->
+    | TPair(tp1, tp2) ->
       pp_at_level 2 lvl
-        (Printf.sprintf "%s" (pp_list "*" ctx 3 tps))
-    and pp_list separator ctx lvl = function
+        (Printf.sprintf "%s * %s"
+          (pp_type ctx 3 tp1)
+          (pp_type ctx 3 tp2))
+  and pp_list separator ctx lvl = function
     | [ tp ] -> pp_type ctx (lvl-1) tp
     | tp :: tps ->
         Printf.sprintf "%s %s %s" (pp_type ctx lvl tp) separator (pp_list separator ctx lvl tps)

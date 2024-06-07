@@ -34,14 +34,15 @@ type_list1
 
 
 expl_type
-: prod_type ARROW2 expl_type                 { TArrow ([ $1 ], $3) }
-| BR_OPN type_list2 BR_CLS ARROW2 expl_type { TArrow ($2, $5) }
-| prod_type                                  { $1 }
+: prod_type ARROW2 expl_type                 { TArrow ($1, $3) }
+| BR_OPN type_list2 BR_CLS ARROW2 expl_type  { TArrow ($2, $5) }
+| simpl_type TYP_STAR simpl_type             { TPair ($1, $3) }
+| simpl_type                                 { $1 }
 ;
 
  prod_type 
-: prod_type TYP_STAR simpl_type  { TProd([$3; $1])  }
-| simpl_type                     { $1 }
+: simpl_type TYP_STAR prod_type  { $1 :: $3  }
+| simpl_type                     { [$1] }
 ;
 
 simpl_type

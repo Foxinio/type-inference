@@ -47,8 +47,9 @@ and lower_uvar_level level' x tp =
       | TIArrow (tps, tp) ->
         List.iter inner tps;
         inner  tp
-      | TIProd tps ->
-        List.iter inner tps
+      | TIPair (tp1, tp2) ->
+        inner tp1;
+        inner tp2
     in inner tp
 
 (* Join operation
@@ -114,9 +115,9 @@ and join (new_tp : t) (current_tp : t) =
       t_arrow args res
   | TIArrow _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
-  | TIProd(ts1), TIProd(ts2) when List.length ts1 = List.length ts2 ->
-      TIProd (List.map2 join ts1 ts2)
-  | TIProd _, _ -> raise (Cannot_compare (new_tp, current_tp))
+  | TIPair(tp1a, tp1b), TIPair(tp2a, tp2b) ->
+      TIPair (join tp1a tp2a, join tp1b tp2b)
+  | TIPair _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
 and join_arrows (tpsa, resa) (tpsb, resb) =
   match tpsa, tpsb with

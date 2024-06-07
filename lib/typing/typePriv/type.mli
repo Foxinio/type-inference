@@ -26,7 +26,20 @@ type view =
   | TGVar   of uvar * view option
   | TUVar   of uvar
   | TArrow  of t list * t
-  | TProd   of t list
+  | TPair   of t * t
+
+module Schema : sig
+  type typ
+
+  val typ_mono : t -> typ
+  val typ_schema : TVarSet.t -> t -> typ
+
+  val instantiate : ?mapping:t TVarMap.t -> Level.t -> typ -> t
+  val generalize : Level.t -> t -> typ
+
+  val get_arguments : typ -> TVarSet.t
+  val get_template : typ -> t
+end
 
 module UVarSet : Set.S with type elt = uvar
 
@@ -42,7 +55,6 @@ val t_var    : TVar.t -> t
 val t_arrow  : t list -> t -> t
 val t_adt    : IMAstVar.t -> Level.t -> t list -> t
 val t_pair   : t -> t -> t
-val t_prod   : t list -> t
 
 val view  : t -> view
 
@@ -55,16 +67,3 @@ val uvar_compare : uvar -> uvar -> int
 
 
 exception Cannot_compare of t * t
-
-module Schema : sig
-  type typ
-
-  val typ_mono : t -> typ
-  val typ_schema : TVarSet.t -> t -> typ
-
-  val instantiate : ?mapping:t TVarMap.t -> Level.t -> typ -> t
-  val generalize : Level.t -> t -> typ
-
-  val get_arguments : typ -> TVarSet.t
-  val get_template : typ -> t
-end

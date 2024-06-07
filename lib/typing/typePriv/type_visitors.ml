@@ -12,8 +12,9 @@ let rec iter f : t -> unit =
     | TIArrow (tps, tp) ->
       List.iter (iter f) tps;
       iter f tp
-    | TIProd tps ->
-      List.iter (iter f) tps
+    | TIPair (tp1, tp2) ->
+      iter f tp1;
+      iter f tp2
   in
   f default
 
@@ -31,9 +32,10 @@ let rec fold_map f init =
       let acc, tps = List.fold_left_map (fold_map f) acc tps in
       let acc, tp = fold_map f acc tp in
       acc, TIArrow (tps, tp)
-    | TIProd tps ->
-      let acc, tps = List.fold_left_map (fold_map f) acc tps in
-      acc, TIProd tps
+    | TIPair (tp1, tp2) ->
+      let acc, tp1 = fold_map f acc tp1 in
+      let acc, tp2 = fold_map f acc tp2 in
+      acc, TIPair (tp1, tp2)
   in
   f default init
 
@@ -49,25 +51,10 @@ let rec map f : t -> t =
       TIADT (name, lvl, List.map (map f) tps)
     | TIArrow (tps, tp) ->
       TIArrow (List.map (map f) tps, map f tp)
-    | TIProd tps ->
-      TIProd (List.map (map f) tps)
+    | TIPair (tp1, tp2) ->
+      TIPair (map f tp1, map f tp2)
   in
   f default
-
-
-let rec foldr f t init =
-  let rec default init t = match t with
-    | TIUnit | TIEmpty | TIBool | TIInt | TIVar _ | TIUVar ({contents={value=Unrealised _;_}}) -> init
-    | TIADT (_, _, tps) ->
-      List.fold_right (foldr f) tps init
-    | TIUVar ({contents={value=Realised tp;_}}) ->
-      f default (foldr f tp init) tp
-    | TIProd tps ->
-      List.fold_right (foldr f) tps init
-    | TIArrow (tps, tp) ->
-      f default (List.fold_right (foldr f) tps init) tp
-  in
-  f default (foldr f t init) t
 
 let rec foldl f init t =
   let rec default init t = match t with
@@ -76,8 +63,10 @@ let rec foldl f init t =
       List.fold_left (foldl f) init tps
     | TIUVar ({contents={value=Realised tp;_}}) ->
       foldl f (f default init tp) tp
-    | TIProd tps ->
-      List.fold_left (foldl f) init tps
+    | TIPair (tp1, tp2) ->
+      let init = foldl f (f default init tp1) tp1 in
+      let init = foldl f (f default init tp2) tp2 in
+      init
     | TIArrow (tps, tp) ->
       List.fold_left (foldl f) (f default init tp) tps
   in

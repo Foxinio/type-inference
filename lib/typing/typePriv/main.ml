@@ -15,7 +15,7 @@ type t =
   | TIADT    of IMAstVar.t * Level.t * t list
   | TIUVar   of uvar
   | TIArrow  of t list * t
-  | TIProd   of t list
+  | TIPair of t * t
 
 and uvar_value =
   | Realised of t
@@ -46,7 +46,7 @@ and view =
   | TGVar   of uvar * view option
   | TUVar   of uvar
   | TArrow  of t list * t
-  | TProd   of t list
+  | TPair of t * t
 
 
 let t_unit  = TIUnit
@@ -56,7 +56,6 @@ let t_int   = TIInt
 let t_var x = TIVar x
 let t_arrow tps tp2 = TIArrow(tps, tp2)
 let t_adt name level tps = TIADT(name, level, tps)
-let t_pair tp1 tp2 = TIProd([tp1; tp2])
-let t_prod tps     = TIProd(tps)
+let t_pair tp1 tp2 = TIPair(tp1, tp2)
 
 let fresh_tvar () = TIVar (TVar.fresh ())

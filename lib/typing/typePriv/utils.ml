@@ -25,7 +25,7 @@ let rec view tp =
   | TIBool -> TBool
   | TIInt -> TInt
   | TIArrow(tps, tp2) -> TArrow(tps, tp2)
-  | TIProd tps -> TProd tps
+  | TIPair (tp1, tp2) -> TPair (tp1, tp2)
 
 and prune_uvar = function
   | TIUVar ({contents={ value=Realised tp;_}} as x) ->

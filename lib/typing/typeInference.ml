@@ -30,9 +30,10 @@ and convert_type node env explicit_type : Type.t =
     let tps = List.map (convert_type node env) tps in
     let tp = convert_type node env tp in
     Type.t_arrow tps tp
-  | Imast.TProd tps ->
-    let tps = List.map (convert_type node env) tps in
-    Type.t_prod tps
+  | Imast.TPair (tp1, tp2) ->
+    let tp1 = convert_type node env tp1 in
+    let tp2 = convert_type node env tp2 in
+    Type.t_pair tp1 tp2
   | Imast.TVar name -> 
     let tp = Env.lookup_delta env name |> unwrap name in
     if Type.TVarSet.is_empty (Schema.get_arguments tp) then Env.instantiate env tp

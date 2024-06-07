@@ -71,9 +71,10 @@ let rec equal tp1 tp2 =
       equal tb1 tb2
     | TArrow _, _ -> raise Cannot_unify
 
-    | TProd(ts1), TProd(ts2) ->
-      List.iter2 equal ts1 ts2
-    | TProd _, _ -> raise Cannot_unify
+    | TPair(tp1a, tp1b), TPair(tp2a, tp2b) ->
+      equal tp1a tp2a;
+      equal tp1b tp2b
+    | TPair _, _ -> raise Cannot_unify
   in
   inner (Type.view tp1, Type.view tp2)
 
@@ -92,9 +93,10 @@ let rec unify_subtype supertype subtype =
       unify_subarrow tps1 tp1 tps2 tp2
     | TArrow _, _ -> raise Cannot_unify
 
-    | TProd(ts1), TProd(ts2) ->
-      List.iter2 unify_subtype ts1 ts2
-    | TProd _, _ -> raise Cannot_unify
+    | TPair(tp1a, tp1b), TPair(tp2a, tp2b) ->
+      unify_subtype tp1a tp2a;
+      unify_subtype tp1b tp2b
+    | TPair _, _ -> raise Cannot_unify
 
     | TUVar _, _
     | _, TUVar _

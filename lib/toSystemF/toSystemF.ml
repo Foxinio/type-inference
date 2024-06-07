@@ -5,8 +5,6 @@ module SystemF = System_f.Type
 module Coerse = SystemF.Coerse
 open Typing
 
-let unimplemented () = failwith "Unimplemented"
-
 let rec tr_type env (tp : Type.t) : SystemF.tp =
   let open Type in
   match view tp with
@@ -19,8 +17,8 @@ let rec tr_type env (tp : Type.t) : SystemF.tp =
   | TVar x -> SystemF.TVar (Env.lookup_tvar env x)
   | TArrow(tps, tp) ->
     SystemF.TArrow(List.map (tr_type env) tps, tr_type env tp)
-  | TProd(tps) ->
-    SystemF.TProd(List.map (tr_type env) tps)
+  | TPair(tp1, tp2) ->
+    SystemF.TPair(tr_type env tp1, tr_type env tp2)
   | TADT(a, _, tps) ->
     SystemF.TADT(a, List.map (tr_type env) tps)
 
@@ -161,15 +159,17 @@ let rec tr_expr env (e : Schema.typ expr) : SystemF.expr =
       else
         failwith "internal error"
 
-    | Type.TProd tps_from, Type.TProd tps_to ->
-      begin match fold_coers true tps_from tps_to with
-        | Either.Left tps ->
-          SystemF.CId (SystemF.TProd tps)
-        | Either.Right coers ->
-          SystemF.CProd coers
+    | Type.TPair (tp1_from, tp2_from), Type.TPair (tp1_to, tp2_to) ->
+      let coers1 = build_coersion env tp1_from tp1_to in
+      let coers2 = build_coersion env tp2_from tp2_to in
+      begin match coers1, coers2 with
+        | SystemF.CId tp1, SystemF.CId tp2 ->
+          SystemF.CId (SystemF.TPair (tp1, tp2))
+        | _ ->
+          SystemF.CPair (coers1, coers2)
       end
 
-    | (Type.TUnit | Type.TBool | Type.TInt | Type.TVar _| Type.TADT _ | Type.TArrow _ | Type.TProd _ | Type.TEmpty), _ ->
+    | (Type.TUnit | Type.TBool | Type.TInt | Type.TVar _| Type.TADT _ | Type.TArrow _ | Type.TPair _ | Type.TEmpty), _ ->
       failwith "internal error"
 
 

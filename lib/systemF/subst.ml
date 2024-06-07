@@ -19,8 +19,8 @@ let rec subst tsub tp =
     in
     let tsub, b = List.fold_left_map f tsub a in
     TForallT(b, subst tsub tp)
-  | TProd(tps) ->
-    TProd(List.map (subst tsub) tps)
+  | TPair (tp1, tp2) ->
+    TPair(subst tsub tp1, subst tsub tp2)
   | TADT(a, tps) ->
     TADT(a, List.map (subst tsub) tps)
 
@@ -53,11 +53,13 @@ let get_subst env_bound_tvars template instance =
       inner bounded mapping tp1 tp2
     | TArrow (tps1, tp1), TArrow (tps2, tp2) ->
       inner bounded (List.fold_left2 (inner bounded) mapping tps1 tps2) tp1 tp2
-    | TProd tps1, TProd tps2 ->
-      List.fold_left2 (inner bounded) mapping tps1 tps2
+    | TPair (tp1a, tp1b), TPair (tp2a, tp2b) ->
+      let mapping = inner bounded mapping tp1a tp2a in
+      let mapping = inner bounded mapping tp1b tp2b in
+      mapping
     | TADT (a1, tps1), TADT (a2, tps2) when Core.Imast.IMAstVar.compare a1 a2 = 0 ->
       List.fold_left2 (inner bounded) mapping tps1 tps2
-    | (TUnit | TBool | TInt | TEmpty | TArrow _ | TProd _ | TADT _ | TForallT _ ), _ ->
+    | (TUnit | TBool | TInt | TEmpty | TArrow _ | TPair _ | TADT _ | TForallT _ ), _ ->
       failwith "internal error"
   in
   inner env_bound_tvars TVarMap.empty template instance
