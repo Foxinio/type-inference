@@ -1,3 +1,3 @@
 (library
- (name to_system_f)
- (libraries core typing system_f))
+ (name toSystemF)
+ (libraries core typing systemF))

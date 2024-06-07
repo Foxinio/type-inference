@@ -1,9 +1,6 @@
-open Core
-open Imast
-
-module SystemF = System_f.Type
 module Coerse = SystemF.Coerse
 open Typing
+open Core
 
 let rec tr_type env (tp : Type.t) : SystemF.tp =
   let open Type in
@@ -25,7 +22,7 @@ let rec tr_type env (tp : Type.t) : SystemF.tp =
 let tr_var env (name,tp) =
   name, tr_type env @@ Schema.get_template tp
 
-let rec tr_expr env (e : Schema.typ expr) : SystemF.expr =
+let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
   match e.data with
   | Imast.EUnit -> SystemF.EUnit
   | Imast.EBool b -> SystemF.EBool b
@@ -175,3 +172,4 @@ let rec tr_expr env (e : Schema.typ expr) : SystemF.expr =
 
 let tr_program ((p,_) : program) : SystemF.program =
   tr_expr Env.empty p
+

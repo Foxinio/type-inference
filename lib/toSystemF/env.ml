@@ -1,11 +1,11 @@
 open Core.Imast
-open System_f
+open SystemF
 
 
 module IMAstVarMap = IMAstVar.MakeMap()
 
 type t = {
-  tvar_map : Type.tvar Typing.TVarMap.t;
+  tvar_map : tvar Typing.TVarMap.t;
 }
 
 let empty = {
@@ -13,7 +13,7 @@ let empty = {
 }
 
 let add_tvar env a =
-  let b = Type.TVar.fresh () in
+  let b = TVar.fresh () in
   { tvar_map = Typing.TVarMap.add a b env.tvar_map}, b
 
 let extend_tvar env =
