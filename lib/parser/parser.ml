@@ -1,8 +1,7 @@
 (** The main module of a parser. It provides convenient wrapper for
   * a yacc-generated parser *)
+open Core
 
-(** Open input channel, pass it to given function, and close the channel
-  * at the end. *)
 let with_channel fname func =
   match open_in fname with
   | chan ->

@@ -1,6 +1,7 @@
 (** OCamllex generated lexer *)
 
 {
+open Core
 
 let report_error_lex (lexbuf : Lexing.lexbuf) fmt =
   Utils.report_error_pp lexbuf.lex_start_p lexbuf.lex_curr_p fmt

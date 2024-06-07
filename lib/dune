@@ -1,4 +1,4 @@
 (library
  (name prototyp_lib)
- (libraries core typing systemF toSystemF))
+ (libraries core typing systemF toSystemF erase parser))
 

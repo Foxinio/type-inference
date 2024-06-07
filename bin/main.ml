@@ -8,12 +8,13 @@ let check_invariant f p =
   p
 
 let pipeline (fname : string) =
-  let p = fname
+  let _ = fname
   |> Parser.parse_file
   |> Imast.translate_to_IMAst
   |> Typing.infer
   |> ToSystemF.tr_program
   |> check_invariant SystemF.ensure_well_typed
+  |> Erase.erase_type
   (* |> Eval.eval_program *)
   in ()
 

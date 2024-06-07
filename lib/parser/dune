@@ -1,0 +1,9 @@
+(library
+ (name parser)
+ (libraries core))
+
+
+(menhir 
+  (modules yaccParser)
+  (explain true))
+(ocamllex lexer)

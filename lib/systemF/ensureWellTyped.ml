@@ -142,7 +142,7 @@ and check_type env e tp =
 
 let ensure_well_typed p =
   let _ : tp = infer_type Env.empty p in
-  p
+  ()
 
 
 

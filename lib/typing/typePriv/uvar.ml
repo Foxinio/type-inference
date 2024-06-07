@@ -61,16 +61,6 @@ and lower_uvar_level level' x tp =
  *
  *)
 and join (new_tp : t) (current_tp : t) =
-  (* TODO: make sure this is correct *)
-  (* this is not correct, because all we know is that overhead uvar can be generalised,
-     however we know nothing about uvar at this stage
-   *)
-  (* begin match new_tp, current_tp with *)
-  (*   | TIUVar x, TIUVar y when is_gvar x || is_gvar y -> *)
-  (*     set_gvar x true; *)
-  (*     set_gvar y true *)
-  (*   | _ -> () *)
-  (* end; *)
   match new_tp, current_tp with
 
   (* when we try to unify UVar and ADT with higher level
@@ -122,6 +112,7 @@ and join (new_tp : t) (current_tp : t) =
 and join_arrows (tpsa, resa) (tpsb, resb) =
   match tpsa, tpsb with
   | tpa :: tpsa, tpb :: tpsb ->
+      (* TODO: call meet here *)
       let tp = join tpb tpa in
       let rest, res = join_arrows (tpsa, resa) (tpsb, resb) in
       tp :: rest, res

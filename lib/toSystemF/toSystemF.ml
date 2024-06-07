@@ -131,11 +131,12 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
     | Type.TVar x, Type.TVar y when TVar.compare x y = 0 ->
       SystemF.CId (tr_type env tp_from)
 
-    (*TODO: reverse *)
-    | _, Type.TEmpty ->
+    | Type.TEmpty, _ ->
       SystemF.CBot (tr_type env tp_from)
 
-    | Type.TADT (name_from, _, args_from), Type.TADT (name_to, _, args_to) when name_from = name_to ->
+    | Type.TADT (name_from, _, args_from),
+      Type.TADT (name_to, _, args_to)
+        when name_from = name_to ->
       assert (List.for_all2 Equal.type_equal args_from args_to);
       SystemF.CId (tr_type env tp_to)
 
@@ -143,16 +144,22 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
       let len_from, len_to = List.length tps_from, List.length tps_to in
       if len_from = len_to then
         let coerse_res = build_coersion env tpres_from tpres_to in
-        match fold_coers (Coerse.is_id coerse_res) tps_from tps_to with
+        match fold_coers (Coerse.is_id coerse_res) tps_to tps_from with
         | Either.Left tps ->
           SystemF.CId (SystemF.TArrow (tps, Coerse.unwrap_id coerse_res |> Option.get))
         | Either.Right coers ->
           SystemF.CArrow (coers, coerse_res)
+      (* TODO: Reverse direction of inequation *)
       else if len_from < len_to then
         let tps_to, tps_to' = Utils.split_list tps_to len_from in
-        let coers = fold_coers false tps_from tps_to
-          |> Either.fold ~left:(fun _ -> assert false) ~right:Fun.id in
-        SystemF.CSubArrow (coers, build_coersion env tpres_from (Type.t_arrow tps_to' tpres_to))
+        let coers = fold_coers false tps_to tps_from
+          |> Either.fold
+            ~left:(List.map (fun tp -> SystemF.CId tp))
+            ~right:Fun.id
+        in
+        SystemF.CSubArrow (coers,
+          build_coersion env tpres_from
+          (Type.t_arrow tps_to' tpres_to))
       else
         failwith "internal error"
 

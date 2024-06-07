@@ -16,6 +16,7 @@
 
 %{
 include YaccParserPreamble
+open Core
 open Ast
 %}
 

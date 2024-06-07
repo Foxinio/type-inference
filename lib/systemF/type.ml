@@ -74,7 +74,7 @@ module Coerse = struct
 
   let rec rebuild = function
     | CId tp -> tp, tp
-    | CBot tp -> tp, TEmpty
+    | CBot tp -> TEmpty, tp
     | CArrow (cps, c) ->
       let tps1, tps2 = List.split @@ List.map rebuild cps in
       let tpres1, tpres2 = rebuild c in
