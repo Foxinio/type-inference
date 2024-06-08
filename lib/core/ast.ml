@@ -25,6 +25,7 @@ module Make(VarType : sig type t end) = struct
     | EBool   of bool
     | ENum    of int
     | EVar    of 'typ var
+    | EExtern of string * 'typ
     | EFn     of 'typ var list * 'typ expr
     | EFix    of 'typ var * 'typ var list * 'typ expr
     | EApp    of 'typ expr * 'typ expr list

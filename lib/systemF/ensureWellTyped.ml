@@ -30,6 +30,9 @@ let rec infer_type env e =
   | ENum  _ -> TInt
   | EVar  x -> Env.lookup_var env x
 
+  | EExtern (name, tp) ->
+    check_well_scoped env tp
+
   | EFn(xs, body) ->
     let f env' (x, tp) =
       let tp = check_well_scoped env tp in

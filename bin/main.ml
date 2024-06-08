@@ -10,7 +10,8 @@ let check_invariant f p =
 let pipeline (fname : string) =
   let _ = fname
   |> Core_parser.parse_file
-  |> Imast.translate_to_IMAst
+  |> Builtin.prepend_prelude
+  |> ToImast.translate
   |> Typing.infer
   |> ToSystemF.tr_program
   |> check_invariant SystemF.ensure_well_typed

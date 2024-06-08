@@ -46,6 +46,7 @@ type expr =
   (* Type Application: τ* *)
   | ETApp   of expr * tp list
   | ELet    of var * expr * expr
+  | EExtern of string * tp
   | EPair   of expr * expr
   | EFst    of expr
   | ESnd    of expr

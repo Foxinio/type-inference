@@ -87,6 +87,10 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
   | EBool b -> EBool b, Type.t_bool
   | ENum  n -> ENum  n, Type.t_int
 
+  | EExtern (name,typ) ->
+    let expl = convert_type e env typ in
+    EExtern (name, Schema.typ_mono expl), expl
+
   | EVar  (name,typ) ->
     let expl = convert_type e env typ in
     let schema = Env.lookup_gamma env name

@@ -1,6 +1,6 @@
 open Type
 
-(* ========================================================================= *)
+(* ========================================================================== *)
 (* Pretty printing of types *)
 
 type ('a, 'b, 'c) vars =
@@ -26,6 +26,8 @@ let type_name_gen i =
       major ^ minor
   in
   inner i
+
+(* ========================================================================== *)
 
 (** Creates fresh pretty-printing context *)
 let pp_context () = ref {env=[]; uvars=0; anons=0}

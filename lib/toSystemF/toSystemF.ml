@@ -34,6 +34,9 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
       |> List.map (fun (_, tp) -> tr_type env tp) in
     SystemF.ETApp (SystemF.EVar name, xs)
 
+  | Imast.EExtern (name, tp) ->
+    SystemF.EExtern (name, tr_type env @@ Schema.get_template tp)
+
   | Imast.EFn(xs, e) ->
     let lst = List.map (tr_var env) xs in
     SystemF.EFn(lst, tr_expr env e)
