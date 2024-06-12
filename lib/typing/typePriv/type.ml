@@ -7,4 +7,5 @@ module Schema = Schema
 
 include Type_visitors
 include Uvar
+include Order
 include Utils

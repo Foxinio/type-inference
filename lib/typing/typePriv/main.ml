@@ -28,9 +28,9 @@ and uvar_struct = {
   (* gvar set means that it was created in abstraction application,
    *   is an arrow and can be generalised to arrow that takes more arguments.
    *
-   * (τ1, τ2) -> (τ3, τ4) -> τ5
-   *    =>
    * (τ1, τ2, τ3, τ4) -> τ5
+   *    =>
+   * (τ1, τ2) -> (τ3, τ4) -> τ5
    *)
   is_gvar: bool;
 }

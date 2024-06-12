@@ -69,6 +69,12 @@ module Type : sig
   val t_adt    : IMAstVar.t -> Level.t -> t list -> t
   val t_pair   : t -> t -> t
 
+  val join : t -> t -> t
+  val meet : t -> t -> t
+  val equal     : t -> t -> bool
+  val subtype   : subtype:t -> supertype:t -> bool
+  val supertype : supertype:t -> subtype:t -> bool
+
   exception Cannot_compare of t * t
 
   module UVarSet : Set.S with type elt = uvar

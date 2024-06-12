@@ -65,5 +65,10 @@ val foldl : (('a -> t -> 'a) -> 'a -> t -> 'a) -> 'a -> t -> 'a
 val set_uvar : uvar -> t -> unit
 val uvar_compare : uvar -> uvar -> int
 
+val join : t -> t -> t
+val meet : t -> t -> t
+val equal     : t -> t -> bool
+val subtype   : subtype:t -> supertype:t -> bool
+val supertype : supertype:t -> subtype:t -> bool
 
 exception Cannot_compare of t * t
