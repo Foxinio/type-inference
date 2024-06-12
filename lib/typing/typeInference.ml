@@ -87,9 +87,13 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
   | EBool b -> EBool b, Type.t_bool
   | ENum  n -> ENum  n, Type.t_int
 
-  | EExtern (name,typ) ->
+  | EExtern (name, typ, _) ->
     let expl = convert_type e env typ in
-    EExtern (name, Schema.typ_mono expl), expl
+    let arg = Env.fresh_uvar env in
+    let res = Env.fresh_uvar env in
+    let tp = Type.t_arrow [arg] res |> Env.wrap_gvar env in
+    Unify.equal expl tp;
+    EExtern (name, Schema.typ_mono expl, Schema.typ_mono arg), expl
 
   | EVar  (name,typ) ->
     let expl = convert_type e env typ in

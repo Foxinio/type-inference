@@ -44,8 +44,8 @@ let translate (p : Ast.program) : program =
       | Ast.EBool b -> EBool b
       | Ast.ENum  n -> ENum n
       | Ast.EVar (s,t) -> EVar (env_find node s gamma_env, conv_type delta_env t)
-      | Ast.EExtern (s,t) ->
-        EExtern (s, conv_type delta_env t)
+      | Ast.EExtern (s,t,_) ->
+        EExtern (s, conv_type delta_env t, THole)
       | Ast.EFn (xs, e) ->
         let gamma_env, xs = extend_gamma xs in
         let e = inner gamma_env delta_env e in

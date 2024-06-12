@@ -1,5 +1,6 @@
 open Main
 open Type_visitors
+open Core.Imast
 
 let degeneralize_uvars tp =
   let rec helper default = function
@@ -41,3 +42,4 @@ and view_uvar x =
     let tp = prune_uvar tp in
     x := { !x with value=Realised tp };
     Some (view tp)
+

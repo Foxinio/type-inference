@@ -1,0 +1,9 @@
+open Core.Imast
+
+type ('a, 'c) ctx
+
+val pp_context : unit -> ('a, 'c) ctx
+val pp_context_of_seq : ('a * string) Seq.t -> ('c, 'a) ctx
+
+val pp_type : (Type.TVar.t, var_type) ctx -> Type.tp -> string
+val string_of_type : Type.tp -> string

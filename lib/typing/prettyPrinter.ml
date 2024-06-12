@@ -28,7 +28,6 @@ let type_name_gen i =
   inner i
 
 (* ========================================================================== *)
-
 (** Creates fresh pretty-printing context *)
 let pp_context () = ref {env=[]; uvars=0; anons=0}
 

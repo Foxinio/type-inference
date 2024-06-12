@@ -30,7 +30,7 @@ let rec infer_type env e =
   | ENum  _ -> TInt
   | EVar  x -> Env.lookup_var env x
 
-  | EExtern (name, tp) ->
+  | EExtern (name, tp, _) ->
     check_well_scoped env tp
 
   | EFn(xs, body) ->
@@ -143,7 +143,7 @@ and check_type env e tp =
   if type_equal tp' tp then ()
   else failwith "Internal type error"
 
-let ensure_well_typed p =
+let ensure_well_typed (p, _) =
   let _ : tp = infer_type Env.empty p in
   ()
 

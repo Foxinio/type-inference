@@ -34,8 +34,10 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
       |> List.map (fun (_, tp) -> tr_type env tp) in
     SystemF.ETApp (SystemF.EVar name, xs)
 
-  | Imast.EExtern (name, tp) ->
-    SystemF.EExtern (name, tr_type env @@ Schema.get_template tp)
+  | Imast.EExtern (name, tp, arg1) ->
+    let tp' = tr_type env @@ Schema.get_template tp in
+    let arg1' = tr_type env @@ Schema.get_template arg1 in
+    SystemF.EExtern (name, tp', arg1')
 
   | Imast.EFn(xs, e) ->
     let lst = List.map (tr_var env) xs in
@@ -79,11 +81,13 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
     SystemF.ESeq(tr_expr env e1, tr_expr env e2)
 
   | Imast.EType ((alias, _), ((_, typ) :: _ as ctor_defs), rest) ->
-    let env', tvars = Env.extend_tvar env @@ TVarSet.to_list @@ Schema.get_arguments typ in
+    let env', tvars = Env.extend_tvar env
+      @@ TVarSet.to_list
+      @@ Schema.get_arguments typ in
     let ctor_defs' = List.map (tr_var env') ctor_defs in
     SystemF.EType(alias, tvars, ctor_defs', tr_expr env rest)
   | Imast.EType ((alias,_), [], rest) ->
-    SystemF.EType(alias,[], [], tr_expr env rest)
+    SystemF.EType(alias, [], [], tr_expr env rest)
 
   | Imast.ECtor (name, body) ->
     SystemF.ECtor (name, tr_expr env body)
@@ -153,6 +157,7 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
         | Either.Right coers ->
           SystemF.CArrow (coers, coerse_res)
       (* TODO: Reverse direction of inequation *)
+      (* ~this should be correct right now *)
       else if len_from < len_to then
         let tps_to, tps_to' = Utils.split_list tps_to len_from in
         let coers = fold_coers false tps_to tps_from
@@ -180,6 +185,6 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
       failwith "internal error"
 
 
-let tr_program ((p,_) : program) : SystemF.program =
-  tr_expr Env.empty p
+let tr_program ((p,env) : program) : SystemF.program =
+  tr_expr Env.empty p, env
 

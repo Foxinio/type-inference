@@ -48,6 +48,7 @@ and view =
   | TArrow  of t list * t
   | TPair of t * t
 
+exception Cannot_compare of t * t
 
 let t_unit  = TIUnit
 let t_empty = TIEmpty

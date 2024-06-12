@@ -42,7 +42,7 @@ type expr =
   (* Type Application: τ* *)
   | ETApp   of expr * tp list
   | ELet    of var * expr * expr
-  | EExtern of string * tp
+  | EExtern of string * tp * tp
   | EPair   of expr * expr
   | EFst    of expr
   | ESnd    of expr
@@ -58,7 +58,7 @@ and ctor_def = name * tp
 and alias = name * tvar list
 and clause = name * var * expr
 
-type program = expr
+type program = expr * string Imast.VarTbl.t
 
 val ensure_well_typed : program -> unit
 val type_equal : tp -> tp -> bool
@@ -70,4 +70,15 @@ module Coerse : sig
   val is_id     : coersion -> bool
   val unwrap_id : coersion -> tp option
   val rebuild   : coersion -> tp * tp
+end
+
+module PrettyPrinter : sig
+  type ('a, 'c) ctx = ('a, 'c) PrettyPrinter.ctx
+
+  val pp_context : unit -> ('a, 'c) ctx
+  val pp_context_of_seq : ('a * string) Seq.t -> ('c, 'a) ctx
+
+  val pp_type : (tvar, Imast.var_type) ctx -> tp -> string
+
+  val string_of_type : tp -> string
 end

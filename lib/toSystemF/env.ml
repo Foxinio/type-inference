@@ -2,7 +2,6 @@ open Core.Imast
 open SystemF
 
 
-module IMAstVarMap = IMAstVar.MakeMap()
 
 type t = {
   tvar_map : tvar Typing.TVarMap.t;

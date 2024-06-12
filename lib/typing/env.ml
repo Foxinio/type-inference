@@ -2,8 +2,6 @@ open Core
 open Type
 open Imast
 
-module VarMap = IMAstVar.MakeMap()
-
 type t = {
   gamma: Schema.typ VarMap.t;
   ctors: (Schema.typ * Schema.typ) VarMap.t;

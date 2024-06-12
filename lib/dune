@@ -2,10 +2,11 @@
  (name prototyp_lib)
  (libraries
    core
-   typing
-   systemF
-   toSystemF
-   erase
    core_parser
-   toImast))
+   toImast
+   typing
+   toSystemF
+   systemF
+   erase
+   ))
 

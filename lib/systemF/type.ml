@@ -46,7 +46,7 @@ type expr =
   (* Type Application: τ* *)
   | ETApp   of expr * tp list
   | ELet    of var * expr * expr
-  | EExtern of string * tp
+  | EExtern of string * tp * tp
   | EPair   of expr * expr
   | EFst    of expr
   | ESnd    of expr
@@ -63,7 +63,7 @@ and ctor_def = name * tp
 and alias = name * tvar list
 and clause = name * var * expr
 
-type program = expr
+type program = expr * string Imast.VarTbl.t
 
 module VarMap  = IMAstVar.MakeMap()
 module TVarMap = Map.Make(TVar)

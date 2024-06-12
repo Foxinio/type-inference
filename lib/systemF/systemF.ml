@@ -6,5 +6,6 @@ let type_equal = Order.type_equal
 
 module Subst = Subst
 module Env   = Env
+module PrettyPrinter = PrettyPrinter
 
 
