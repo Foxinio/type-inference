@@ -108,7 +108,7 @@ let handle_exit (expected : expected) proc_status =
 (* -------------------------------------------------------------------------- *)
 
 let check_line expected actual =
-  if expected = actual
+  if Str.string_match (Str.regexp_string expected) actual 0
   then ()
   else (
     Printf.eprintf

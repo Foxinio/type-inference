@@ -1,0 +1,14 @@
+type either ('a, 'b) =
+	| Inl of 'a
+  | Inr of 'b
+
+let x =
+	if true
+	then Inl ()
+	else Inr 42
+
+let _ =
+	match x with
+	| Inl x -> 13
+	| Inr x -> x
+	
