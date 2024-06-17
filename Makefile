@@ -13,7 +13,9 @@ test: build
 	@test/end2end/test.sh .
 
 tex:
-	latexmk -C tex
+	$(MAKE) -C tex paper.pdf
+	$(MAKE) -C tex notes.pdf
+	$(MAKE) -C tex przyklad.pdf
 
 clean:
 	latexmk -c

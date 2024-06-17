@@ -1,0 +1,51 @@
+\documentclass[a4paper]{article}
+% \usepackage[utf8]{inputenc}
+% \usepackage{hyperref}
+% \usepackage{microtype}
+\usepackage{mathtools}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{mathpartir}
+\usepackage{esvect}
+% \usepackage{stmaryrd} % for llbracket
+% \usepackage{enumitem} % for roman enumeration
+% \usepackage{tikz}
+
+% \usepackage[square]{natbib}
+% \bibliographystyle{plainnat}
+
+% Our own macros and definitions
+\usepackage{macros}
+
+\title{notes}
+\author{Szymon Jędras}
+\date{\today}
+
+\begin{document}
+
+\section{Language definition}
+\begin{alignat*}{2}
+  \defcategory{Type}\type
+		{\type \to \type \mid \type * \type \mid \ctor\vv{\type}}{types}\\
+  \defcategory{Expr}\expr
+	{\synval \mid \expr\;\expr \mid \expr\;*}{expressions} \\
+  \defcategory{Value}\synval
+	{\lambda x.\expr \mid x \mid \Lambda \expr}{values}
+\end{alignat*}
+
+\section{Order on types and Lattice}
+
+Lets establish order on types:
+\begin{mathpar}
+  \inferrule{ }
+            {\bot \sqsubseteq \tau}
+
+  \inferrule{\Delta;\Gamma\vdash e : \forall\alpha.\tau}
+            {\Delta;\Gamma\vdash e\;* : \tau\{\tau'/\alpha\}}
+\end{mathpar}
+
+\section{Infering types using uvars}
+
+  % \bibliography{references}
+\end{document}
