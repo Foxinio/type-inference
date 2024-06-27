@@ -25,7 +25,7 @@ let rec view tp =
   | TIEmpty -> TEmpty
   | TIBool -> TBool
   | TIInt -> TInt
-  | TIArrow(tps, tp2) -> TArrow(tps, tp2)
+  | TIArrow(eff, tps, tp2) -> TArrow(eff, tps, tp2)
   | TIPair (tp1, tp2) -> TPair (tp1, tp2)
 
 and prune_uvar = function

@@ -11,11 +11,11 @@ type t =
   | TIEmpty
   | TIBool
   | TIInt
-  | TIVar    of TVar.t
-  | TIADT    of IMAstVar.t * Level.t * t list
-  | TIUVar   of uvar
-  | TIArrow  of t list * t
-  | TIPair of t * t
+  | TIVar   of TVar.t
+  | TIADT   of IMAstVar.t * Level.t * t list
+  | TIUVar  of uvar
+  | TIArrow of Effect.t * t list * t
+  | TIPair  of t * t
 
 and uvar_value =
   | Realised of t
@@ -41,12 +41,12 @@ and view =
   | TEmpty
   | TBool
   | TInt
-  | TVar    of TVar.t
-  | TADT    of IMAstVar.t * Level.t * t list
-  | TGVar   of uvar * view option
-  | TUVar   of uvar
-  | TArrow  of t list * t
-  | TPair of t * t
+  | TVar   of TVar.t
+  | TADT   of IMAstVar.t * Level.t * t list
+  | TGVar  of uvar * view option
+  | TUVar  of uvar
+  | TArrow of Effect.t * t list * t
+  | TPair  of t * t
 
 exception Cannot_compare of t * t
 
@@ -55,7 +55,7 @@ let t_empty = TIEmpty
 let t_bool  = TIBool
 let t_int   = TIInt
 let t_var x = TIVar x
-let t_arrow tps tp2 = TIArrow(tps, tp2)
+let t_arrow eff tps tp2 = TIArrow(eff, tps, tp2)
 let t_adt name level tps = TIADT(name, level, tps)
 let t_pair tp1 tp2 = TIPair(tp1, tp2)
 

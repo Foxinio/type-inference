@@ -133,8 +133,8 @@ let translate (p : Ast.program) : program =
           TAlias (v, ts)
         | Ast.TPair (tp1, tp2) ->
           TPair (conv_type delta_env tp1, conv_type delta_env tp2)
-        | Ast.TArrow (ts, t) ->
-          TArrow (List.map (conv_type delta_env) ts, (conv_type delta_env) t)
+        | Ast.TArrow (eff, ts, t) ->
+          TArrow (eff, List.map (conv_type delta_env) ts, (conv_type delta_env) t)
     in
     { node with
       data = conv_expr data;

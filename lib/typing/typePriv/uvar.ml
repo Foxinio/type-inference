@@ -27,7 +27,7 @@ let rec set_uvar x tp =
     x := {!x with value=Realised tp }
   | {value=Realised tp_current; is_gvar=true;_} ->
       (* TODO: confirm that meet belongs here *)
-      let res = meet tp tp_current in
+      let res = merge tp tp_current in
       x := { !x with value=Realised res }
   | { value=Realised _;_ } ->
      failwith "tried to set realised uvar"
@@ -45,7 +45,7 @@ and lower_uvar_level level' x tp =
         inner  tp
       | TIADT (_, _, tps) ->
          List.iter inner tps
-      | TIArrow (tps, tp) ->
+      | TIArrow (_, tps, tp) ->
         List.iter inner tps;
         inner  tp
       | TIPair (tp1, tp2) ->

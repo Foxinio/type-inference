@@ -11,11 +11,12 @@ let get_subst template instance =
     | TUnit, TUnit | TBool, TBool | TInt, TInt | TEmpty, TEmpty -> mapping
     | TVar a, _ ->
       begin match TVarMap.find_opt a mapping with
-      | Some tp when Equal.type_equal tp instance -> mapping
+      | Some tp when Type.equal tp instance -> mapping
       | None -> TVarMap.add a instance mapping
       | Some _ -> failwith "internal error"
     end
-    | TArrow (tps1, tp1), TArrow (tps2, tp2) ->
+    | TArrow (eff1, tps1, tp1), TArrow (eff2, tps2, tp2)
+        when eff1 = eff2 ->
       inner (List.fold_left2 inner mapping tps1 tps2) tp1 tp2
     | TPair (tp1a, tp1b), TPair (tp2a, tp2b) ->
       let mapping = inner mapping tp1a tp2a in

@@ -19,3 +19,8 @@ val lookup_tvar : t -> tvar -> tvar
 val lookup_ctor : t -> var -> tp * name * tvar list
 
 val tvar_set : t -> TVarSet.t
+
+val push_eff_stack : t -> t
+val pop_eff_stack : t -> Core.Effect.t
+val impure_top : t -> 'a
+

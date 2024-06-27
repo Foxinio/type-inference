@@ -1,7 +1,7 @@
 NAME = paper
 .PHONY: $(NAME).pdf clean clean-all
 
-$(NAME).pdf: $(NAME).tex
+%.pdf: %.tex
 		latexmk -pdf -use-make -f $<
 
 clean:

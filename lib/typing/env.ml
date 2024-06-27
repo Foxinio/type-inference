@@ -1,12 +1,14 @@
 open Core
 open Type
 open Imast
+open Effect
 
 type t = {
   gamma: Schema.typ VarMap.t;
   ctors: (Schema.typ * Schema.typ) VarMap.t;
   delta: Schema.typ VarMap.t;
   var_name: string VarTbl.t;
+  eff_stack: Effect.uvar list;
   level: Level.t;
 }
 
@@ -15,6 +17,7 @@ let empty = {
   ctors=VarMap.empty;
   delta=VarMap.empty;
   var_name=VarTbl.create 11;
+  eff_stack=[];
   level=Level.starting;
 }
 let of_var_names var_name =
@@ -102,3 +105,19 @@ let lookup_var_name ?(default="<unknown>") {var_name;_} x = VarTbl.find_opt var_
 
 let seq_of_var_name {var_name;_} = VarTbl.to_seq var_name
 
+(* effect stack *)
+
+let push_eff_uvar env =
+  { env with eff_stack=(Effect.fresh_uvar ()) :: env.eff_stack }
+
+let unpure_top_eff env =
+  match env.eff_stack with
+  | [] -> ()
+  | x :: _ ->
+    Effect.impure_uvar x;
+    ()
+
+let pop_eff_uvar env =
+  match env.eff_stack with
+  | [] -> raise (Invalid_argument "cannot pop empty stack")
+  | x :: _ -> get_val x

@@ -1,4 +1,4 @@
-(** The main module of a inerpreter *)
+(** The main module of a interpreter *)
 
 open Prototyp_lib
 open Core

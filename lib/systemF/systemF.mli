@@ -15,7 +15,7 @@ type tp =
   | TBool
   | TInt
   | TVar     of tvar
-  | TArrow   of tp list * tp
+  | TArrow   of Effect.t * tp list * tp
   | TADT     of adtvar * tp list
   | TForallT of tvar list * tp
   | TPair    of tp * tp
@@ -23,10 +23,12 @@ type tp =
 type coersion =
   | CId       of tp
   | CBot      of tp
-  | CArrow    of coersion list * coersion
+  | CArrow    of Effect.t * coersion list * coersion
   | CForallT  of tvar list * coersion
   | CPair     of coersion * coersion
-  | CSubArrow of coersion list * coersion
+  | CMrgArrow  of coersion list * coersion
+  | CSpltArrow of coersion list * coersion
+  | CImprArrow of coersion list * coersion
 
 type expr =
   | EUnit
@@ -34,8 +36,8 @@ type expr =
   | ENum    of int
   | EVar    of var
   | ECoerse of coersion * expr
-  | EFn     of (var * tp) list * expr
-  | EFix    of var * (var * tp) list * tp * expr
+  | EFn     of (var * tp) list * expr * Effect.t
+  | EFix    of var * (var * tp) list * tp * expr * Effect.t
   | EApp    of expr * expr list
   (* Big lambda: Λα.τ *)
   | ETFn    of tvar list * expr

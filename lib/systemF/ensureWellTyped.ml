@@ -9,8 +9,8 @@ let rec check_well_scoped env tp =
   match tp with
   | TUnit | TEmpty | TBool | TInt -> tp
   | TVar a -> TVar (Env.lookup_tvar env a)
-  | TArrow(tps, tpres) ->
-    TArrow(List.map (check_well_scoped env) tps, check_well_scoped env tpres)
+  | TArrow(eff, tps, tpres) ->
+    TArrow(eff, List.map (check_well_scoped env) tps, check_well_scoped env tpres)
   | TForallT(a, tp) ->
     let (env, a) = Env.extend_tvar env a in
     TForallT(a, check_well_scoped env tp)
@@ -20,7 +20,7 @@ let rec check_well_scoped env tp =
     TADT(a, List.map (check_well_scoped env) tps)
 
 let split_arrow tps tpres =
-  let f tp acc = TArrow([tp], acc) in
+  let f tp acc = TArrow(Pure, [tp], acc) in
   List.fold_left f tpres tps
 
 let rec infer_type env e =
@@ -39,21 +39,26 @@ let rec infer_type env e =
       Env.add_var env' x tp, tp
     in
     let env, tp1 = List.fold_left_map f env xs in
+    let env = Env.push_eff_stack env in
     let tp2 = infer_type env body in
-    TArrow(tp1, tp2)
+    TArrow(Env.pop_eff_stack env, tp1, tp2)
 
   | EFix(f, lst, tpres, body) ->
     let tpres = check_well_scoped env tpres in
     let lst = List.map (fun (x,tp) -> x, check_well_scoped env tp) lst in
-    let f_tp = split_arrow (List.map snd lst) tpres in
-    let env = Env.extend_var (Env.add_var env f f_tp) lst in
+    let tps = List.map snd lst in
+    let f_tp = TArrow(Unknown, tps, tpres) in
+    let env = Env.add_var env f f_tp in
+    let env = Env.extend_var env lst in
+    let env = Env.push_eff_stack env in
     check_type env body tpres;
-    f_tp
+    TArrow(Env.pop_eff_stack env, tps, tpres)
 
   | EApp(e1, es) ->
     begin match infer_type env e1 with
-    | TArrow(tps, tp1) when List.length tps = List.length es ->
+    | TArrow(eff, tps, tp1) when List.length tps = List.length es ->
       List.iter2 (check_type env) es tps;
+      if eff = Impure then Env.impure_top env;
       tp1
     | _ -> failwith "Internal type error"
     end

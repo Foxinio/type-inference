@@ -8,10 +8,52 @@
 \theoremstyle{definition}
 \newtheorem{defin}[theorem]{Definition}
 
+% \newcommand\macro[2]{%
+% 	\expandafter\newcommand#1#2}
+
 % Enumeration in theorems and definitions
 \newenvironment{thmenumerate}
   {\begin{enumerate}[label=(\roman*),itemsep=0pt]}
   {\end{enumerate}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Lambda calculus macros
+
+\newcommand\defcategory[4]{%
+\mathsf{#1} & \ni #2 && \Coloneqq #3 \tag{#4}}
+
+\newcommand\varx{x}
+\newcommand\vary{y}
+\newcommand\varz{z}
+\newcommand\tvara{\alpha}
+\newcommand\tvarb{\beta}
+\newcommand\uvarx{?\! X}
+\newcommand\uvary{?\! Y}
+\newcommand\uvarz{?\! Z}
+\newcommand\expr{e}
+\newcommand\synval{v}
+\newcommand\type{\tau}
+\newcommand\scheme{\sigma}
+\newcommand\ctor{\texttt{ctor}}
+
+\newcommand\code[1]{\texttt{#1}}
+
+\newcommand\env{\Gamma}
+\newcommand\tenv{\Delta}
+\newcommand\extendEnv[2]{#1,#2}
+
+% \newcommand\vector[1]{\vv{#1]}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Inference rules macros
+
+\newcommand\typing[4]{#1;#2\vdash #3 : #4}
+\newcommand\infertype[5]{#1;#2\vdash #3 \Uparrow #4 / #5}
+\newcommand\checktype[5]{#1;#2\vdash #3 \Downarrow #4 / #5}
+\newcommand\unify[3]{#1 \stackrel{?}{=} #2 / #3}
+\newcommand\subtype[2]{#1 \sqsubseteq #2}
+
+\newcommand\subst[2]{\{#2/#1\}}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Typesetting conventions for different objects
@@ -33,12 +75,6 @@
 % Domain
 \newcommand\dom{\mathsf{dom}}
 
-% Denotation
-\newcommand\Denot[1]{\llbracket#1\rrbracket}
-
 % Type safety
 \newcommand\rawSafe{\mathsf{Safe}}
 \newcommand\Safe[1]{\rawSafe(#1)} 
-
-% Observation (in biorthogonal LR)
-\newcommand\Obs{\mathsf{Obs}}

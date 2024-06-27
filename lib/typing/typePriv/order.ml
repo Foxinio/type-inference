@@ -1,5 +1,9 @@
 open Main
-open Core.Imast
+open Core
+open Imast
+
+
+(* TODO: Fix this mess *)
 
 (* Join operation
  * (τ₁, τ₂) -> (τ₃) -> τ₄
@@ -9,12 +13,12 @@ open Core.Imast
  * (τ₁, τ₂, τ₃) -> τ₄
  *
  *)
-let rec join (new_tp : t) (current_tp : t) =
+let rec merge (new_tp : t) (current_tp : t) =
   match new_tp, current_tp with
   | TIUVar x, _ ->
-    join_with_uvar x (Either.Right current_tp)
+    merge_with_uvar x (Either.Right current_tp)
   | _, TIUVar x ->
-    join_with_uvar x (Either.Left new_tp)
+    merge_with_uvar x (Either.Left new_tp)
 
   | TIUnit, TIUnit    -> TIUnit
   | TIUnit, _ -> raise (Cannot_compare (new_tp, current_tp))
@@ -27,49 +31,70 @@ let rec join (new_tp : t) (current_tp : t) =
   | _, TIVar _ ->
       raise (Cannot_compare (new_tp, current_tp))
 
-  | TIADT _, TIADT _ when equal new_tp current_tp ->
-      new_tp
-  | TIADT _, _ ->
-    raise (Cannot_compare (new_tp, current_tp))
+  | TIADT _, TIADT _ when equal new_tp current_tp -> new_tp
+  | TIADT _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
   | TIBool, TIBool -> TIBool
   | TIBool, _ -> raise (Cannot_compare (new_tp, current_tp))
   | TIInt, TIInt -> TIInt
   | TIInt, _ -> raise (Cannot_compare (new_tp, current_tp))
 
-  | TIArrow (tpsa, tp_resa),
-    TIArrow (tpsb, tp_resb) ->
-      let args, res = join_arrows (tpsa, tp_resa) (tpsb, tp_resb) in
-      t_arrow args res
+  | TIArrow (effa, tpsa, tp_resa),
+    TIArrow (effb, tpsb, tp_resb) ->
+      let eff = Effect.join effa effb in
+      let args, res = merge_arrows (tpsa, tp_resa) (tpsb, tp_resb) in
+      t_arrow eff args res
   | TIArrow _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
   | TIPair(tp1a, tp1b), TIPair(tp2a, tp2b) ->
-      TIPair (join tp1a tp2a, join tp1b tp2b)
+      TIPair (merge tp1a tp2a, merge tp1b tp2b)
   | TIPair _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
-and join_arrows (tpsa, resa) (tpsb, resb) =
+(* and merge_pure_arrows (tpsa, resa) (tpsb, resb) = *)
+(*   match tpsa, tpsb with *)
+(*   | tpa :: tpsa, tpb :: tpsb -> *)
+(*       let tp = split tpb tpa in *)
+(*       let rest, res = merge_pure_arrows (tpsa, resa) (tpsb, resb) in *)
+(*       tp :: rest, res *)
+(*   | [], _ :: _ -> *)
+(*       begin match merge resa (TIPureArrow (tpsb, resb)) with *)
+(*       | TIPureArrow (tps, tpres) -> tps, tpres *)
+(*       | tpres -> [], tpres *)
+(*       end *)
+(*   | _ :: _, [] -> *)
+(*       begin match merge (TIPureArrow (tpsa, resa)) resb with *)
+(*       | TIPureArrow (tps, tpres) -> tps, tpres *)
+(*       | tpres -> [], tpres *)
+(*       end *)
+(*   | [], [] -> *)
+(*       begin match merge resa resb with *)
+(*       | TIPureArrow (tps, tpres) -> tps, tpres *)
+(*       | tpres -> [], tpres *)
+(*       end *)
+
+and merge_arrows (tpsa, resa) (tpsb, resb) =
   match tpsa, tpsb with
   | tpa :: tpsa, tpb :: tpsb ->
-      let tp = meet tpb tpa in
-      let rest, res = join_arrows (tpsa, resa) (tpsb, resb) in
+      let tp = split tpb tpa in
+      let rest, res = merge_arrows (tpsa, resa) (tpsb, resb) in
       tp :: rest, res
   | [], _ :: _ ->
-      begin match join resa (TIArrow (tpsb, resb)) with
-      | TIArrow (tps, tpres) -> tps, tpres
+      begin match merge resa (TIArrow (Impure, tpsb, resb)) with
+      | TIArrow (_, tps, tpres) -> tps, tpres
       | tpres -> [], tpres
       end
   | _ :: _, [] ->
-      begin match join (TIArrow (tpsa, resa)) resb with
-      | TIArrow (tps, tpres) -> tps, tpres
+      begin match merge (TIArrow (Impure, tpsa, resa)) resb with
+      | TIArrow (_, tps, tpres) -> tps, tpres
       | tpres -> [], tpres
       end
   | [], [] ->
-      begin match join resa resb with
-      | TIArrow (tps, tpres) -> tps, tpres
+      begin match merge resa resb with
+      | TIArrow (_, tps, tpres) -> tps, tpres
       | tpres -> [], tpres
       end
 
-and join_with_uvar ?(loop=false) x tp =
+and merge_with_uvar ?(loop=false) x tp =
   match !x, tp with
   | {value=Unrealised _;_}, Right tp
   | {value=Unrealised _;_}, Left tp ->
@@ -77,17 +102,17 @@ and join_with_uvar ?(loop=false) x tp =
     tp
   | {value=Realised new_tp; is_gvar=true;_}, Right current_tp
   | {value=Realised current_tp; is_gvar=true;_}, Left new_tp ->
-    let res = join new_tp current_tp in
+    let res = merge new_tp current_tp in
     x := { !x with value=Realised res };
     res
   | {value=Realised _; is_gvar=false;_}, Left (TIUVar y) when not loop ->
-      join_with_uvar y ~loop:true (Right (TIUVar x))
+      merge_with_uvar y ~loop:true (Right (TIUVar x))
   | {value=Realised _; is_gvar=false;_}, Right (TIUVar y) when not loop ->
-      join_with_uvar y ~loop:true (Left (TIUVar x))
+      merge_with_uvar y ~loop:true (Left (TIUVar x))
 
   | {value=Realised new_tp;_}, Right current_tp
   | {value=Realised current_tp;_}, Left new_tp ->
-    join new_tp current_tp
+    merge new_tp current_tp
 
 (* Meet operation
  * (τ₁, τ₂) -> (τ₃) -> τ₄
@@ -97,12 +122,12 @@ and join_with_uvar ?(loop=false) x tp =
  * (τ₁) -> (τ₂) -> (τ₃) -> τ₄
  *
  *)
-and meet (new_tp : t) (current_tp : t) =
+and split (new_tp : t) (current_tp : t) =
   match new_tp, current_tp with
   | TIUVar x, _ ->
-    meet_with_uvar x (Either.Right current_tp)
+    split_with_uvar x (Either.Right current_tp)
   | _, TIUVar x ->
-    meet_with_uvar x (Either.Left new_tp)
+    split_with_uvar x (Either.Left new_tp)
 
   | TIUnit, TIUnit    -> TIUnit
   | TIUnit, _ -> raise (Cannot_compare (new_tp, current_tp))
@@ -115,44 +140,52 @@ and meet (new_tp : t) (current_tp : t) =
   | _, TIVar _ ->
       raise (Cannot_compare (new_tp, current_tp))
 
-  | TIADT (new_adt, new_lvl, new_tps),
-    TIADT (cur_adt, cur_lvl, cur_tps)
-      when equal new_tp current_tp ->
-      assert (cur_lvl = new_lvl);
-      assert (new_tp = current_tp);
-      TIADT (new_adt, new_lvl, new_tps)
-  | TIADT _, _ ->
-    raise (Cannot_compare (new_tp, current_tp))
+  | TIADT _, TIADT _ when equal new_tp current_tp -> new_tp
+  | TIADT _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
   | TIBool, TIBool -> TIBool
   | TIBool, _ -> raise (Cannot_compare (new_tp, current_tp))
   | TIInt, TIInt -> TIInt
   | TIInt, _ -> raise (Cannot_compare (new_tp, current_tp))
 
-  | TIArrow (tpsa, tp_resa),
-    TIArrow (tpsb, tp_resb) ->
-      let args, res = meet_arrows (tpsa, tp_resa) (tpsb, tp_resb) in
-      t_arrow args res
+  | TIArrow (effa, tpsa, tp_resa),
+    TIArrow (effb, tpsb, tp_resb) ->
+      let eff = Effect.join effa effb in
+      let args, res = split_arrows (tpsa, tp_resa) (tpsb, tp_resb) in
+      t_arrow eff args res
   | TIArrow _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
   | TIPair(tp1a, tp1b), TIPair(tp2a, tp2b) ->
-      TIPair (meet tp1a tp2a, meet tp1b tp2b)
+      TIPair (split tp1a tp2a, split tp1b tp2b)
   | TIPair _, _ -> raise (Cannot_compare (new_tp, current_tp))
 
-and meet_arrows (tpsa, resa) (tpsb, resb) =
+and split_arrows (tpsa, resa) (tpsb, resb) =
   match tpsa, tpsb with
   | tpa :: tpsa, tpb :: tpsb ->
-      let tp = join tpb tpa in
-      let rest, res = meet_arrows (tpsa, resa) (tpsb, resb) in
+      let tp = merge tpb tpa in
+      let rest, res = split_arrows (tpsa, resa) (tpsb, resb) in
       tp :: rest, res
   | [], _ :: _ ->
-      [], meet resa (TIArrow (tpsb, resb))
+      [], split resa (TIArrow (Impure, tpsb, resb))
   | _ :: _, [] ->
-      [], meet (TIArrow (tpsa, resa)) resb
+      [], split (TIArrow (Impure, tpsa, resa)) resb
   | [], [] ->
-      [], meet resa resb
+      [], split resa resb
 
-and meet_with_uvar ?(loop=false) x tp =
+(* and split_pure_arrows (tpsa, resa) (tpsb, resb) = *)
+(*   match tpsa, tpsb with *)
+(*   | tpa :: tpsa, tpb :: tpsb -> *)
+(*       let tp = merge tpb tpa in *)
+(*       let rest, res = split_pure_arrows (tpsa, resa) (tpsb, resb) in *)
+(*       tp :: rest, res *)
+(*   | [], _ :: _ -> *)
+(*       [], split resa (TIPureArrow (tpsb, resb)) *)
+(*   | _ :: _, [] -> *)
+(*       [], split (TIPureArrow (tpsa, resa)) resb *)
+(*   | [], [] -> *)
+(*       [], split resa resb *)
+
+and split_with_uvar ?(loop=false) x tp =
   match !x, tp with
   | {value=Unrealised _;_}, Right tp
   | {value=Unrealised _;_}, Left tp ->
@@ -160,17 +193,17 @@ and meet_with_uvar ?(loop=false) x tp =
     tp
   | {value=Realised new_tp; is_gvar=true;_}, Right current_tp
   | {value=Realised current_tp; is_gvar=true;_}, Left new_tp ->
-    let res = meet new_tp current_tp in
+    let res = split new_tp current_tp in
     x := { !x with value=Realised res };
     res
   | {value=Realised _; is_gvar=false;_}, Left (TIUVar y) when not loop ->
-      meet_with_uvar y ~loop:true (Right (TIUVar x))
+      split_with_uvar y ~loop:true (Right (TIUVar x))
   | {value=Realised _; is_gvar=false;_}, Right (TIUVar y) when not loop ->
-      meet_with_uvar y ~loop:true (Left (TIUVar x))
+      split_with_uvar y ~loop:true (Left (TIUVar x))
 
   | {value=Realised new_tp;_}, Right current_tp
   | {value=Realised current_tp;_}, Left new_tp ->
-    meet new_tp current_tp
+    split new_tp current_tp
 
 and equal t1 t2 = match t1, t2 with
   | TIUVar x, _ ->
@@ -200,9 +233,11 @@ and equal t1 t2 = match t1, t2 with
   | TIInt, TIInt -> true
   | TIInt, _ -> false
 
-  | TIArrow (tpsa, tp_resa),
-    TIArrow (tpsb, tp_resb) when List.length tpsa = List.length tpsb ->
-    equal tp_resa tp_resb && List.equal equal tpsa tpsb
+  | TIArrow (effb, tpsa, tp_resa),
+    TIArrow (effa, tpsb, tp_resb) when List.length tpsa = List.length tpsb ->
+    equal tp_resa tp_resb
+    && List.equal equal tpsa tpsb
+    && effa = effb
   | TIArrow _, _ -> false
 
   | TIPair(tp1a, tp1b), TIPair(tp2a, tp2b) ->
@@ -232,26 +267,43 @@ and subtype_impl subtype supertype =
   | TIEmpty, _     -> true
   | _, TIEmpty -> false
 
-  | TIArrow (tpsa, tp_resa),
-    TIArrow (tpsb, tp_resb) ->
-      subtype_arrows (tpsa, tp_resa) (tpsb, tp_resb)
+  | TIArrow (effa, tpsa, tp_resa),
+    TIArrow (effb, tpsb, tp_resb) ->
+      subtype_arrows (Effect.join effa effb) (tpsa, tp_resa) (tpsb, tp_resb)
   | TIArrow _, _ -> false
+
+  (* | TIPureArrow (tpsa, tp_resa), *)
+  (*   TIPureArrow (tpsb, tp_resb) -> *)
+  (*     subtype_pure_arrows (tpsa, tp_resa) (tpsb, tp_resb) *)
+  (* | TIPureArrow _, _ -> false *)
 
   | TIPair(tp1a, tp1b), TIPair(tp2a, tp2b) ->
       subtype_impl tp1a tp2a && subtype_impl tp1b tp2b
   | TIPair _, _ -> false
 
-and subtype_arrows (tpsa, resa) (tpsb, resb) =
+and subtype_arrows eff (tpsa, resa) (tpsb, resb) =
   match tpsa, tpsb with
   | tpa :: tpsa, tpb :: tpsb ->
       subtype_impl tpb tpa
-      && subtype_arrows (tpsa, resa) (tpsb, resb)
+      && subtype_arrows eff (tpsa, resa) (tpsb, resb)
   | [], _ :: _ ->
-      subtype_impl resa (TIArrow (tpsb, resb))
+      subtype_impl resa (TIArrow (eff, tpsb, resb))
   | _ :: _, [] ->
       false
   | [], [] ->
       subtype_impl resa resb
+
+(* and subtype_pure_arrows (tpsa, resa) (tpsb, resb) = *)
+(*   match tpsa, tpsb with *)
+(*   | tpa :: tpsa, tpb :: tpsb -> *)
+(*       subtype_impl tpb tpa *)
+(*       && subtype_pure_arrows (tpsa, resa) (tpsb, resb) *)
+(*   | [], _ :: _ -> *)
+(*       subtype_impl resa (TIPureArrow (tpsb, resb)) *)
+(*   | _ :: _, [] -> *)
+(*       subtype_impl (TIPureArrow (tpsa, resa)) resb *)
+(*   | [], [] -> *)
+(*       subtype_impl resa resb *)
 
 and subtype_with_uvar ?(loop=false) x tp =
   match !x, tp with

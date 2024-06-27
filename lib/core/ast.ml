@@ -53,7 +53,7 @@ module Make(VarType : sig type t end) = struct
     | TVar of var_type
     | TAlias of var_type * expl_type list
     | TPair of expl_type * expl_type
-    | TArrow of expl_type list * expl_type
+    | TArrow of Effect.t * expl_type list * expl_type
 
   let rec type_fmap f t =
     let default t = match t with
@@ -62,8 +62,8 @@ module Make(VarType : sig type t end) = struct
         TAlias (name, List.map (type_fmap f) tps)
       | TPair (tp1, tp2) ->
         TPair (type_fmap f tp1, type_fmap f tp2)
-      | TArrow (tps, tp) ->
-        TArrow (List.map (type_fmap f) tps, type_fmap f tp)
+      | TArrow (eff, tps, tp) ->
+        TArrow (eff, List.map (type_fmap f) tps, type_fmap f tp)
     in
     f default t
 
@@ -75,7 +75,7 @@ module Make(VarType : sig type t end) = struct
       | TPair (tp1, tp2) ->
         type_iter f tp1;
         type_iter f tp2
-      | TArrow (tps, tp) ->
+      | TArrow (_, tps, tp) ->
         List.iter (type_iter f) tps;
         type_iter f tp
     in
@@ -92,7 +92,7 @@ module Make(VarType : sig type t end) = struct
         List.fold_right (type_foldr f) tps init
       | TPair (tp1, tp2) ->
         f default (f default init tp1) tp2
-      | TArrow (tps, tp) ->
+      | TArrow (_, tps, tp) ->
         f default (List.fold_right (type_foldr f) tps init) tp
     in
     f default (type_foldr f t init) t
@@ -108,7 +108,7 @@ module Make(VarType : sig type t end) = struct
         List.fold_left (type_foldl f) init tps
       | TPair (tp1, tp2) ->
         type_foldl f (f default init tp1) tp2
-      | TArrow (tps, tp) ->
+      | TArrow (_, tps, tp) ->
         List.fold_left (type_foldl f) (f default init tp) tps
     in
     type_foldl f (f default init t) t

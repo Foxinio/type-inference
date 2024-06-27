@@ -35,8 +35,8 @@ type_list1
 
 
 expl_type
-: prod_type ARROW2 expl_type                 { TArrow ($1, $3) }
-| BR_OPN type_list2 BR_CLS ARROW2 expl_type  { TArrow ($2, $5) }
+: prod_type ARROW2 expl_type                 { TArrow (Pure, $1, $3) }
+| BR_OPN type_list2 BR_CLS ARROW2 expl_type  { TArrow (Pure, $2, $5) }
 | simpl_type TYP_STAR simpl_type             { TPair ($1, $3) }
 | simpl_type                                 { $1 }
 ;

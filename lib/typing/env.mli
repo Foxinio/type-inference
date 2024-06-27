@@ -28,3 +28,7 @@ val fresh_gvar : t -> Type.t
 val wrap_gvar  : t -> Type.t -> Type.t
 val instantiate : ?mapping:Type.t Type.TVarMap.t -> t -> Schema.typ -> Type.t
 val generalize : t -> Type.t -> Schema.typ
+
+val push_eff_uvar : t  -> t
+val unpure_top_eff : t -> unit
+val pop_eff_uvar : t -> Effect.t

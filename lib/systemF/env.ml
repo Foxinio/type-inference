@@ -1,17 +1,20 @@
 (** Typing environments *)
 
 open Type
+open Core
 
 type t =
-  { var_map  : tp VarMap.t;
-    tvar_map : tvar TVarMap.t;
-    ctor_map : (tp*name*tvar list) VarMap.t;
+  { var_map   : tp VarMap.t;
+    tvar_map  : tvar TVarMap.t;
+    ctor_map  : (tp*name*tvar list) VarMap.t;
+    eff_stack : Effect.uvar list;
   }
 
 let empty =
-  { var_map  = VarMap.empty;
-    tvar_map = TVarMap.empty;
-    ctor_map = VarMap.empty;
+  { var_map   = VarMap.empty;
+    tvar_map  = TVarMap.empty;
+    ctor_map  = VarMap.empty;
+    eff_stack = [];
   }
 
 let add_var env x tp =
@@ -56,6 +59,12 @@ let lookup_ctor env x =
   | None -> failwith "Internal error: unbound constructor"
   | Some tp -> tp
 
+let push_eff_stack env =
+  { env with eff_stack = Effect.fresh_uvar () :: env.eff_stack }
+
+let pop_eff_stack env = List.hd env.eff_stack
+
+let impure_top env = List.hd env.eff_stack |> Effect.get_val
 
 let tvar_set env =
   TVarMap.to_seq env.tvar_map |> Seq.map fst |> TVarSet.of_seq

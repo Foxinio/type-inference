@@ -10,8 +10,8 @@ let rec subst tsub tp =
     | None    -> tp
     | Some tp -> tp
     end
-  | TArrow(tps, tp2) ->
-    TArrow(List.map (subst tsub) tps, subst tsub tp2)
+  | TArrow(eff, tps, tp2) ->
+    TArrow(eff, List.map (subst tsub) tps, subst tsub tp2)
   | TForallT(a, tp) ->
     let f tsub a =
       let b = TVar.fresh () in
@@ -51,7 +51,7 @@ let get_subst env_bound_tvars template instance =
     | TForallT (a, tp1), TForallT (b, tp2) ->
       let bounded = List.fold_left (Fun.flip TVarSet.add) bounded a in
       inner bounded mapping tp1 tp2
-    | TArrow (tps1, tp1), TArrow (tps2, tp2) ->
+    | TArrow (eff1, tps1, tp1), TArrow (eff2, tps2, tp2) when eff1 = eff2 ->
       inner bounded (List.fold_left2 (inner bounded) mapping tps1 tps2) tp1 tp2
     | TPair (tp1a, tp1b), TPair (tp2a, tp2b) ->
       let mapping = inner bounded mapping tp1a tp2a in

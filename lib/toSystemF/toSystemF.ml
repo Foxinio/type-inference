@@ -2,6 +2,11 @@ module Coerse = SystemF.Coerse
 open Typing
 open Core
 
+let extract_eff (e : Schema.typ Imast.expr) = 
+  match Schema.get_template e.typ |> Type.view with
+  | Type.TArrow(eff, _, _) -> eff
+  | _ -> raise (Invalid_argument "cannot extract from non-arrow")
+
 let rec tr_type env (tp : Type.t) : SystemF.tp =
   let open Type in
   match view tp with
@@ -12,8 +17,8 @@ let rec tr_type env (tp : Type.t) : SystemF.tp =
   | TBool -> SystemF.TBool
   | TInt  -> SystemF.TInt
   | TVar x -> SystemF.TVar (Env.lookup_tvar env x)
-  | TArrow(tps, tp) ->
-    SystemF.TArrow(List.map (tr_type env) tps, tr_type env tp)
+  | TArrow(eff, tps, tp) ->
+    SystemF.TArrow(eff, List.map (tr_type env) tps, tr_type env tp)
   | TPair(tp1, tp2) ->
     SystemF.TPair(tr_type env tp1, tr_type env tp2)
   | TADT(a, _, tps) ->
@@ -39,20 +44,20 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
     let arg1' = tr_type env @@ Schema.get_template arg1 in
     SystemF.EExtern (name, tp', arg1')
 
-  | Imast.EFn(xs, e) ->
+  | Imast.EFn(xs, body) ->
     let lst = List.map (tr_var env) xs in
-    SystemF.EFn(lst, tr_expr env e)
+    SystemF.EFn(lst, tr_expr env body, extract_eff e)
 
   | Imast.EFix(f, xs, body) ->
     let f, _ = tr_var env f in
     let lst = List.map (tr_var env) xs in
     let tpres = tr_type env @@ Schema.get_template body.typ in
-    SystemF.EFix(f, lst, tpres, tr_expr env e)
+    SystemF.EFix(f, lst, tpres, tr_expr env e, extract_eff e)
 
   | Imast.EApp(e1, es) ->
     let rec inner e1 es tp = 
       begin match Type.view tp with
-      | Type.TArrow (tps, tpres) ->
+      | Type.TArrow (eff, tps, tpres) ->
         let es, es' = Utils.split_list es (List.length tps) in
         let es = List.map2 (add_coersion env) es tps in
         let e1' = SystemF.EApp (e1, es) in
@@ -62,7 +67,9 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
     inner (tr_expr env e1) es @@ Schema.get_template e1.typ
 
   | Imast.ELet((x, tp), e1, e2) ->
-    let env', tvars = Env.extend_tvar env @@ TVarSet.to_list @@ Schema.get_arguments tp in
+    let env', tvars = Env.extend_tvar env
+        @@ TVarSet.to_list
+        @@ Schema.get_arguments tp in
     let e1' = tr_expr env' e1 in
     let e2' = tr_expr env e2 in
     SystemF.ELet(x, SystemF.ETFn(tvars, e1'), e2')
@@ -144,10 +151,10 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
     | Type.TADT (name_from, _, args_from),
       Type.TADT (name_to, _, args_to)
         when name_from = name_to ->
-      assert (List.for_all2 Equal.type_equal args_from args_to);
+      assert (List.for_all2 Type.equal args_from args_to);
       SystemF.CId (tr_type env tp_to)
 
-    | Type.TArrow (tps_from, tpres_from), Type.TArrow (tps_to, tpres_to) ->
+    | Type.TArrow (eff_from, tps_from, tpres_from), Type.TArrow (eff_to, tps_to, tpres_to) ->
       let len_from, len_to = List.length tps_from, List.length tps_to in
       if len_from = len_to then
         let coerse_res = build_coersion env tpres_from tpres_to in

@@ -46,7 +46,8 @@ let rec equal tp1 tp2 =
     | TGVar (_, Some tp1), tp2 -> inner (tp1, tp2)
     | tp1, TGVar (_, Some tp2) -> inner (tp1, tp2)
 
-    | TADT (x, lvl1, tps1), TADT (y, lvl2, tps2) when IMAstVar.compare x y = 0 -> 
+    | TADT (x, lvl1, tps1), TADT (y, lvl2, tps2)
+        when IMAstVar.compare x y = 0 -> 
       assert(lvl1=lvl2);
       List.iter2 equal tps1 tps2
     | TADT _, _-> raise Cannot_unify
@@ -66,7 +67,7 @@ let rec equal tp1 tp2 =
     | TInt, TInt -> ()
     | TInt, _ -> raise Cannot_unify
 
-    | TArrow(ta1, tb1), TArrow(ta2, tb2) ->
+    | TArrow(effa, ta1, tb1), TArrow(effb, ta2, tb2) when effa = effb ->
       List.iter2 equal ta1 ta2;
       equal tb1 tb2
     | TArrow _, _ -> raise Cannot_unify
@@ -89,8 +90,10 @@ let rec unify_subtype supertype subtype =
     | TGVar (_, Some tp1), tp2 -> inner (tp1, tp2)
     | tp1, TGVar (_, Some tp2) -> inner (tp1, tp2)
 
-    | TArrow(tps1, tp1), TArrow(tps2, tp2) ->
-      unify_subarrow tps1 tp1 tps2 tp2
+    | TArrow(effa, tps1, tp1), TArrow(effb, tps2, tp2)
+        when Effect.compare effa effb <= 0 ->
+      let eff = Effect.join effa effb in
+      unify_subarrow eff tps1 tp1 tps2 tp2
     | TArrow _, _ -> raise Cannot_unify
 
     | TPair(tp1a, tp1b), TPair(tp2a, tp2b) ->
@@ -112,18 +115,35 @@ let rec unify_subtype supertype subtype =
   in inner (Type.view supertype, Type.view subtype)
 
 
-and unify_subarrow tps1 tp1 tps2 tp2 =
+and unify_subarrow eff tps1 tp1 tps2 tp2 =
   (* this is impelemnted correctly 10/05/24 *)
   let rec inner = function
+    (* this rule is needed to be implemented in this way,
+       so that every arrow has at least one argument *)
     | [tp1'], tp2' :: (_ :: _ as tps2) ->
       unify_subtype tp2' tp1';
       begin match Type.view tp1 with
-      | TArrow (tps1, tp1) ->
-        unify_subarrow tps1 tp1 tps2 tp2
-      | TGVar (x, Some (TArrow (tps1, tp1))) ->
-        unify_subarrow tps1 tp1 tps2 tp2
+      | TArrow (eff', tps1, tp1) ->
+        let eff' = Effect.join eff eff' in
+        unify_subarrow eff' tps1 tp1 tps2 tp2
+      | TGVar (x, Some (TArrow (eff', tps1, tp1))) ->
+        let eff' = Effect.join eff eff' in
+        unify_subarrow eff' tps1 tp1 tps2 tp2
       | TUVar x | TGVar (x, None) ->
-        unify_with_uvar x (Type.t_arrow tps2 tp2)
+        unify_with_uvar x (Type.t_arrow eff tps2 tp2)
+      | _ -> raise Cannot_unify
+      end
+    | tp1' :: (_ :: _ as tps1), [tp2'] when eff = Pure || eff = Unknown ->
+      unify_subtype tp2' tp1';
+      begin match Type.view tp2 with
+      | TArrow (eff', tps2, tp2) ->
+        let eff' = Effect.join eff eff' in
+        unify_subarrow eff' tps1 tp1 tps2 tp2
+      | TGVar (x, Some (TArrow (eff', tps2, tp2))) ->
+        let eff' = Effect.join eff eff' in
+        unify_subarrow eff' tps1 tp1 tps2 tp2
+      | TUVar x | TGVar (x, None) ->
+        unify_with_uvar x (Type.t_arrow eff tps1 tp1)
       | _ -> raise Cannot_unify
       end
     | tp1' :: tps1, tp2' :: tps2 ->
