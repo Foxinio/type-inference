@@ -10,7 +10,7 @@ let env_find e x env =
     | None -> raise (Out_of_scope (x, e))
 
 let extend_map f keys env =
-    let seq = List.to_seq keys |> Seq.flat_map f |> Seq.unzip in
+    let seq = List.to_seq keys |> Seq.map f |> Seq.unzip in
     StringMap.add_seq (fst seq) env, List.of_seq (snd seq)
 
 
@@ -20,18 +20,11 @@ let translate (p : Ast.program) : program =
   let rec inner (gamma_env : IMAstVar.t StringMap.t)
                 (delta_env : IMAstVar.t StringMap.t)
                 ({ data; typ; _ } as node : Ast.expl_type Ast.expr) : expl_type expr =
-    let rec extend_gamma (keys : Ast.expl_type Ast.var list) : IMAstVar.t StringMap.t * expl_type var list =
-        let f (x,t) = 
-          let v = IMAstVar.fresh () in
-          VarTbl.add vartbl v x;
-          Seq.return ((x, v), (v, conv_type delta_env t))
-        in
-          extend_map f keys gamma_env
-    and extend_delta delta_env (keys : Ast.var_type list) : IMAstVar.t StringMap.t * var_type list =
+    let rec extend_delta delta_env (keys : Ast.var_type list) : IMAstVar.t StringMap.t * var_type list =
         let f x = 
           let v = IMAstVar.fresh () in
           VarTbl.add vartbl v x;
-          Seq.return ((x, v), v)
+          ((x, v), v)
         in
         extend_map f keys delta_env
     and fresh_var (x,t) =
@@ -46,20 +39,22 @@ let translate (p : Ast.program) : program =
       | Ast.EVar (s,t) -> EVar (env_find node s gamma_env, conv_type delta_env t)
       | Ast.EExtern (s,t,_) ->
         EExtern (s, conv_type delta_env t, THole)
-      | Ast.EFn (xs, e) ->
-        let gamma_env, xs = extend_gamma xs in
+      | Ast.EFn ((x, xt), e) ->
+        let (x', xt) = fresh_var (x, xt) in
+        let gamma_env = StringMap.add x x' gamma_env in
         let e = inner gamma_env delta_env e in
-        EFn (xs, e)
-      | Ast.EFix ((f,t), xs, e) ->
-        let gamma_env, xs = extend_gamma xs in
-        let (fv,t) = fresh_var (f,t) in
-        let gamma_env = StringMap.add f fv gamma_env in
+        EFn ((x', xt), e)
+      | Ast.EFix ((f,ft), (x, xt), e) ->
+        let (x', xt) = fresh_var (x, xt) in
+        let gamma_env = StringMap.add x x' gamma_env in
+        let (f',ft) = fresh_var (f,ft) in
+        let gamma_env = StringMap.add f f' gamma_env in
         let e = inner gamma_env delta_env e in
-        EFix ((fv,t), xs, e)
-      | Ast.EApp (e1, es) ->
+        EFix ((f', ft), (x', xt), e)
+      | Ast.EApp (e1, e2) ->
         let e1 = inner gamma_env delta_env e1 in
-        let es = List.map (inner gamma_env delta_env) es in
-        EApp (e1, es)
+        let e2 = inner gamma_env delta_env e2 in
+        EApp (e1, e2)
       | Ast.ELet ((x,t), e1, e2) ->
         let e1 = inner gamma_env delta_env e1 in
         let (v,t) = fresh_var (x,t) in
@@ -99,8 +94,7 @@ let translate (p : Ast.program) : program =
         let f (ctor_name, ctor_type) = 
           let ctor_name' = IMAstVar.fresh () in
           VarTbl.add vartbl ctor_name' ctor_name;
-          Seq.return ((ctor_name, ctor_name'),
-            (ctor_name', conv_type delta_env_with_alias_args ctor_type))
+          ((ctor_name, ctor_name'), (ctor_name', conv_type delta_env_with_alias_args ctor_type))
         in
         let delta_env, ctor_list' = extend_map f ctor_list delta_env_with_alias_name in
         let rest' = inner gamma_env delta_env rest in
@@ -133,8 +127,8 @@ let translate (p : Ast.program) : program =
           TAlias (v, ts)
         | Ast.TPair (tp1, tp2) ->
           TPair (conv_type delta_env tp1, conv_type delta_env tp2)
-        | Ast.TArrow (eff, ts, t) ->
-          TArrow (eff, List.map (conv_type delta_env) ts, (conv_type delta_env) t)
+        | Ast.TArrow (eff, targ, tres) ->
+          TArrow (eff, conv_type delta_env targ, conv_type delta_env tres)
     in
     { node with
       data = conv_expr data;

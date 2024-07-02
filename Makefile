@@ -18,11 +18,9 @@ tex:
 	$(MAKE) -C tex przyklad.pdf
 
 clean:
-	latexmk -c
 	dune clean
-	rm -f paper.pdf
-	latexmk -C tex clean
+	$(MAKE) -C tex clean
 
 clean-all:
-	latexmk -C
+	dune clean
 	latexmk -C tex clean-all

@@ -1,9 +1,9 @@
 (* LICENSE *)
 
 type t =
-  | Unknown
-  | Pure
-  | Impure
+  | EffUnknown
+  | EffPure
+  | EffImpure
 
 type uvar = t ref
 
@@ -11,38 +11,38 @@ let set_uvar x eff =
   x := eff
 
 let impure_uvar x =
-  x := Impure
+  x := EffImpure
 
 let get_val x = !x
 
-let fresh_uvar () = ref Pure
+let fresh_uvar () = ref EffUnknown
 
 let compare a b =
   match a, b with
   | a, b when a = b -> 0
-  | Unknown, Pure -> 1
-  | _, Impure -> 1
+  | EffUnknown, EffPure -> 1
+  | _, EffImpure -> 1
   | a, b -> - compare b a
 
 let join a b =
   match a, b with
-  | Unknown, eff
-  | eff, Unknown -> eff
-  | Pure, Pure -> Pure
-  | Impure, _
-  | _, Impure -> Impure
+  | EffUnknown, eff
+  | eff, EffUnknown -> eff
+  | EffPure, EffPure -> EffPure
+  | EffImpure, _
+  | _, EffImpure -> EffImpure
 
 let join_uvar a b =
   let joined = join !a !b in
   a := joined;
   b := joined
 
-let pure = Pure
-let not_pure = Impure
-let unknown = Unknown
+let pure = EffPure
+let not_pure = EffImpure
+let unknown = EffUnknown
 
 let equal_mod_known a b =
   match a,b with
   | _ when a = b -> true
-  | Unknown, _ | _, Unknown -> true
+  | EffUnknown, _ | _, EffUnknown -> true
   | _ -> false

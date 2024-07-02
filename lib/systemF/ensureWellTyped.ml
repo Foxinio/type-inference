@@ -20,7 +20,7 @@ let rec check_well_scoped env tp =
     TADT(a, List.map (check_well_scoped env) tps)
 
 let split_arrow tps tpres =
-  let f tp acc = TArrow(Pure, [tp], acc) in
+  let f tp acc = TArrow(EffPure, [tp], acc) in
   List.fold_left f tpres tps
 
 let rec infer_type env e =
@@ -47,7 +47,7 @@ let rec infer_type env e =
     let tpres = check_well_scoped env tpres in
     let lst = List.map (fun (x,tp) -> x, check_well_scoped env tp) lst in
     let tps = List.map snd lst in
-    let f_tp = TArrow(Unknown, tps, tpres) in
+    let f_tp = TArrow(EffUnknown, tps, tpres) in
     let env = Env.add_var env f f_tp in
     let env = Env.extend_var env lst in
     let env = Env.push_eff_stack env in
@@ -58,7 +58,7 @@ let rec infer_type env e =
     begin match infer_type env e1 with
     | TArrow(eff, tps, tp1) when List.length tps = List.length es ->
       List.iter2 (check_type env) es tps;
-      if eff = Impure then Env.impure_top env;
+      if eff = EffImpure then Env.impure_top env;
       tp1
     | _ -> failwith "Internal type error"
     end

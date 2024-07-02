@@ -79,12 +79,12 @@ and merge_arrows (tpsa, resa) (tpsb, resb) =
       let rest, res = merge_arrows (tpsa, resa) (tpsb, resb) in
       tp :: rest, res
   | [], _ :: _ ->
-      begin match merge resa (TIArrow (Impure, tpsb, resb)) with
+      begin match merge resa (TIArrow (EffImpure, tpsb, resb)) with
       | TIArrow (_, tps, tpres) -> tps, tpres
       | tpres -> [], tpres
       end
   | _ :: _, [] ->
-      begin match merge (TIArrow (Impure, tpsa, resa)) resb with
+      begin match merge (TIArrow (EffImpure, tpsa, resa)) resb with
       | TIArrow (_, tps, tpres) -> tps, tpres
       | tpres -> [], tpres
       end
@@ -166,9 +166,9 @@ and split_arrows (tpsa, resa) (tpsb, resb) =
       let rest, res = split_arrows (tpsa, resa) (tpsb, resb) in
       tp :: rest, res
   | [], _ :: _ ->
-      [], split resa (TIArrow (Impure, tpsb, resb))
+      [], split resa (TIArrow (EffImpure, tpsb, resb))
   | _ :: _, [] ->
-      [], split (TIArrow (Impure, tpsa, resa)) resb
+      [], split (TIArrow (EffImpure, tpsa, resa)) resb
   | [], [] ->
       [], split resa resb
 

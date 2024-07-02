@@ -95,7 +95,7 @@ module Coerse = struct
       let tps1, tps2 = List.split @@ List.map rebuild cps in
       begin match rebuild c with
       | tpres1, TArrow(eff, tps2', tpres2) ->
-        TArrow (Pure, tps1, tpres1),
+        TArrow (EffPure, tps1, tpres1),
         TArrow (eff, tps2 @ tps2', tpres2)
       | _ -> assert false
       end
@@ -104,15 +104,15 @@ module Coerse = struct
       begin match rebuild c with
       | TArrow(eff, tps1', tpres1), tpres2 ->
         TArrow (eff, tps1 @ tps1', tpres1),
-        TArrow (Pure, tps2, tpres2)
+        TArrow (EffPure, tps2, tpres2)
       | _ -> assert false
       end
     | CImprArrow c ->
       begin match rebuild c with
-      | TArrow(Pure, tps1, tpres1),
-        TArrow(Pure, tps2, tpres2) ->
-        TArrow (Pure, tps1, tpres1),
-        TArrow (Impure, tps2, tpres2)
+      | TArrow(EffPure, tps1, tpres1),
+        TArrow(EffPure, tps2, tpres2) ->
+        TArrow (EffPure, tps1, tpres1),
+        TArrow (EffImpure, tps2, tpres2)
       | _ -> assert false
       end
 end

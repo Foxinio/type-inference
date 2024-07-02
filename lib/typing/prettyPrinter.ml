@@ -74,13 +74,13 @@ let rec pp_type ctx lvl tp =
     | TGVar (x, None) -> pp_context_lookup (UVar x) ctx
     | TGVar (x, Some tp) ->
         matcher lvl tp
-    | TArrow(Pure, tps, tp2) ->
+    | TArrow(EffPure, tps, tp2) ->
       pp_at_level 0 lvl
         (Printf.sprintf "%s -> %s" (pp_list "," ctx 1 tps) (pp_type ctx 0 tp2))
-    | TArrow(Unknown, tps, tp2) ->
+    | TArrow(EffUnknown, tps, tp2) ->
       pp_at_level 0 lvl
         (Printf.sprintf "%s ->? %s" (pp_list "," ctx 1 tps) (pp_type ctx 0 tp2))
-    | TArrow(Impure, tps, tp2) ->
+    | TArrow(EffImpure, tps, tp2) ->
       pp_at_level 0 lvl
         (Printf.sprintf "%s ->[] %s" (pp_list "," ctx 1 tps) (pp_type ctx 0 tp2))
     | TPair(tp1, tp2) ->

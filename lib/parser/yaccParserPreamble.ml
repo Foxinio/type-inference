@@ -16,6 +16,9 @@ let make data =
 let make_with_typ data typ =
   { (make data) with typ=typ }
 
+(* given arguments (wrapped in node) and type this arrow returns,
+   gives arguments ids (as pairs) and type of a whole arrow
+    (if no argument was annotated with a type, second result is a THole *)
 let extract args typ =
   let extract_ids arg = (arg.data, arg.typ) in
   let found = ref (typ = THole) in
@@ -24,27 +27,38 @@ let extract args typ =
     | {typ=tp;_} -> found := true; tp
   in
   let extracted_typ = List.map extract_typ args in
-  (List.map extract_ids args,
-   if !found then
-    TArrow (Pure, extracted_typ, typ)
-    else THole)
+  List.map extract_ids args,
+  if !found then t_arrow EffUnknown extracted_typ typ else THole
+
+let fold_fn args body typ =
+  let aux arg body =
+    { (make (EFn (arg, body))) with typ=THole }
+  in
+  { (List.fold_right aux args body) with typ }
 
 let desugar_fn args body typ =
   let args, typ = extract args typ in
-  { (make (EFn(args, body))) with typ }
+  fold_fn args body typ
+
+let fold_fix fn args body typ =
+  match args with
+  | arg :: args ->
+    let body = fold_fn args body typ in
+    { (make (EFix((fn, typ), arg, body))) with typ }
+  | [] -> assert false
 
 let desugar_fix fn args body typ =
   let args, typ = extract args typ in
-  { (make (EFix((fn, typ), args, body))) with typ }
+  fold_fix fn args body typ
 
 let desugar_let_fun f args body typ =
   let args, typ = extract args typ in
-  let fn = { (make (EFn(args, body))) with typ } in
+  let fn = fold_fn args body typ in
   make (DLet((f,typ), fn))
 
 let desugar_let_rec fn args body typ =
   let args, typ = extract args typ in
-  let fix = { (make (EFix((fn, typ), args, body))) with typ } in
+  let fix = fold_fix fn args body typ in
   make (DLet((fn, typ), fix))
 
 let desugar_def def rest =
@@ -70,11 +84,6 @@ let desugar_def def rest =
 
 let desugar_defs defs rest =
   List.fold_right desugar_def defs rest
-
-let desugar_app = function
-  | fn :: args ->
-    make (EApp(fn, args))
-  | [] -> assert false
 
 (* maybe there is a better way to do this,
    but i think its over all a good idea *)

@@ -133,7 +133,7 @@ and unify_subarrow eff tps1 tp1 tps2 tp2 =
         unify_with_uvar x (Type.t_arrow eff tps2 tp2)
       | _ -> raise Cannot_unify
       end
-    | tp1' :: (_ :: _ as tps1), [tp2'] when eff = Pure || eff = Unknown ->
+    | tp1' :: (_ :: _ as tps1), [tp2'] when eff = EffPure || eff = EffUnknown ->
       unify_subtype tp2' tp1';
       begin match Type.view tp2 with
       | TArrow (eff', tps2, tp2) ->

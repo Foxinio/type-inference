@@ -1,6 +1,9 @@
 /** Yacc-generated parser */
-%token<string> LID UID AID 
+%token<string> LID UID AID
 /** AID - apostrophe ids */
+/** LID - lowercase ids  */
+/** UID - uppercase ids  */
+
 %token<int> NUM
 %token BR_OPN BR_CLS
 %token TYP_STAR TYP_COLON
@@ -22,48 +25,39 @@ open Ast
 
 %%
 
-type_list2
-: expl_type COMMA expl_type  { [ $1; $3 ] }
-| expl_type COMMA type_list2 { $1 :: $3   }
+expl_type_list2
+: expl_type COMMA expl_type       { [ $1 ] }
+| expl_type COMMA expl_type_list2 { $1 :: $3   }
 ;
-
-
-type_list1
-: expl_type                  { [ $1 ] }
-| expl_type COMMA type_list2 { $1 :: $3   }
-;
-
 
 expl_type
-: prod_type ARROW2 expl_type                 { TArrow (Pure, $1, $3) }
-| BR_OPN type_list2 BR_CLS ARROW2 expl_type  { TArrow (Pure, $2, $5) }
-| simpl_type TYP_STAR simpl_type             { TPair ($1, $3) }
-| simpl_type                                 { $1 }
+: prod_type ARROW2 expl_type                 { TArrow (EffUnknown, $1, $3) }
+| prod_type                                  { $1                       }
 ;
 
- prod_type 
-: simpl_type TYP_STAR prod_type  { $1 :: $3  }
-| simpl_type                     { [$1] }
+ prod_type
+: prod_type TYP_STAR simpl_type { TPair($1, $3)  }
+| simpl_type                    { $1             }
 ;
 
 simpl_type
-: BR_OPN expl_type BR_CLS { $2 }
-| AID                     { TVar $1              }
-| LID                     { desugar_type_alias $1 [] }
-(* | LID expl_type           { desugar_type_alias $1 [$2] } *)
-| LID BR_OPN type_list1 BR_CLS { desugar_type_alias $1 $3 }
-| TYP_KW_INT              { TInt }
-| TYP_KW_BOOL             { TBool }
-| TYP_KW_UNIT             { TUnit }
+: BR_OPN expl_type BR_CLS           { $2                       }
+| AID                               { TVar $1                  }
+| LID                               { desugar_type_alias $1 [] }
+| LID simpl_type                    { desugar_type_alias $1 [$2] }
+| LID BR_OPN expl_type_list2 BR_CLS { desugar_type_alias $1 $3 }
+| TYP_KW_INT                        { TInt                     }
+| TYP_KW_BOOL                       { TBool                    }
+| TYP_KW_UNIT                       { TUnit                    }
 ;
 
 id
-: LID { make $1 }
+: LID                                   { make $1             }
 | BR_OPN LID TYP_COLON expl_type BR_CLS { make_with_typ $2 $4 }
 ;
 
 id_list1
-: id          { [ $1 ] }
+: id          { [ $1 ]   }
 | id id_list1 { $1 :: $2 }
 ;
 
@@ -73,8 +67,8 @@ bar_opt
 ;
 
 expr
-: def_list1 KW_IN       expr { desugar_defs $1 $3 }
-| KW_FN id_list1 ARROW2 expr { desugar_fn $2 $4 THole }
+: def_list1 KW_IN       expr      { desugar_defs $1 $3         }
+| KW_FN id_list1 ARROW2 expr      { desugar_fn $2 $4 THole     }
 | KW_FIX LID id_list1 ARROW2 expr { desugar_fix $2 $3 $5 THole }
 | KW_MATCH expr KW_WITH
   bar_opt clauses KW_END
@@ -82,20 +76,15 @@ expr
 | KW_IF expr KW_THEN expr KW_ELSE expr
     { make (EIf($2, $4, $6)) }
 | expr_app SEMICOLON expr { make (ESeq($1, $3)) }
-| expr_app { $1 }
+| expr_app                { $1 }
 ;
 
 expr_app
-: expr_simple_list2 { desugar_app $1 }
-| KW_FST   expr_simple { make (EFst $2) }
-| KW_SND   expr_simple { make (ESnd $2) }
+: expr_app expr_simple { make (EApp ($1, $2))  }
+| KW_FST   expr_simple { make (EFst $2)       }
+| KW_SND   expr_simple { make (ESnd $2)       }
 | UID      expr_simple { make (ECtor($1, $2)) }
-| expr_simple { $1 }
-;
-
-expr_simple_list2
-: expr_simple expr_simple { [ $1; $2 ] }
-| expr_simple expr_simple_list2 { $1 :: $2 }
+| expr_simple          { $1                   }
 ;
 
 expr_simple
@@ -103,15 +92,14 @@ expr_simple
 | BR_OPN expr BR_CLS            { make ($2).data }
 | KW_BEGIN expr KW_END          { make ($2).data }
 | BR_OPN expr COMMA expr BR_CLS { make (EPair($2, $4)) }
-| NUM      { make (ENum $1) }
-| LID      { make (EVar ($1, THole)) }
-| KW_TRUE  { make (EBool true) }
-| KW_FALSE { make (EBool false) }
+| NUM                           { make (ENum $1) }
+| LID                           { make (EVar ($1, THole)) }
+| KW_TRUE                       { make (EBool true) }
+| KW_FALSE                      { make (EBool false) }
 ;
 
 clause
 : UID LID ARROW2 expr { ($1, ($2, THole), $4) }
-(* : UID LID ARROW2 expr { ($1, ($2, THole), $3) } *)
 ;
 
 clauses
@@ -128,15 +116,15 @@ const_list
 | const BAR const_list { $1 :: $3 }
 ;
 
+aid_list2
+: AID COMMA AID          { [$1; $3] }
+| AID COMMA aid_list2    { $1 :: $3 }
+;
+
 alias
 : LID                         { ($1, [])   }
 | LID AID                     { ($1, [$2]) }
 | LID BR_OPN aid_list2 BR_CLS { ($1, $3)   }
-;
-
-aid_list2
-: AID COMMA AID          { [$1; $3] }
-| AID COMMA aid_list2    { $1 :: $3 }
 ;
 
 def
