@@ -14,6 +14,7 @@ let split_list xs n =
 
 exception Fatal_error
 exception Internal_error
+exception Runtime_error
 
 
 (** Pretty-printer of locations *)
@@ -52,5 +53,11 @@ let report_error (node : ('a,'b) Ast.node) fmt =
 let report_internal_error fmt =
   Printf.kfprintf
     (fun _ -> raise Internal_error)
+    stderr
+    ("internal error: " ^^ fmt ^^ "\n")
+
+let report_runtime_error fmt =
+  Printf.kfprintf
+    (fun _ -> raise Runtime_error)
     stderr
     ("internal error: " ^^ fmt ^^ "\n")
