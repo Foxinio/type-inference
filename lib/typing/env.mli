@@ -24,11 +24,9 @@ val seq_of_var_name : t -> (Imast.var_type * string) Seq.t
 val increase_level_major : t -> t
 val increase_level_minor : t -> t
 val fresh_uvar : t -> Type.t
-val fresh_gvar : t -> Type.t
-val wrap_gvar  : t -> Type.t -> Type.t
 val instantiate : ?mapping:Type.t Type.TVarMap.t -> t -> Schema.typ -> Type.t
 val generalize : t -> Type.t -> Schema.typ
 
-val push_eff_uvar : t  -> t
+val push_eff_uvar : t -> Effect.uvar -> t
 val unpure_top_eff : t -> unit
-val pop_eff_uvar : t -> Effect.t
+val pop_eff_uvar : t -> Effect.uvar

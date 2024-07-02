@@ -31,14 +31,6 @@ let increase_level_major ({ level;_} as env) =
   { env with level=Level.increase_major level }
 
 let fresh_uvar {level;_} = Type.fresh_uvar level
-let fresh_gvar {level;_} = Type.fresh_gvar level
-let wrap_gvar env tp =
-  let res = fresh_gvar env in
-  match Type.view res with
-  | TGVar (gvar, _) ->
-    Type.set_uvar gvar tp;
-    res
-  | _ -> assert false
 
 let instantiate ?(mapping=TVarMap.empty) {level;_} typ =
   Schema.instantiate ~mapping level typ
@@ -107,8 +99,8 @@ let seq_of_var_name {var_name;_} = VarTbl.to_seq var_name
 
 (* effect stack *)
 
-let push_eff_uvar env =
-  { env with eff_stack=(Effect.fresh_uvar ()) :: env.eff_stack }
+let push_eff_uvar env uve =
+  { env with eff_stack=uve :: env.eff_stack }
 
 let unpure_top_eff env =
   match env.eff_stack with
@@ -120,4 +112,4 @@ let unpure_top_eff env =
 let pop_eff_uvar env =
   match env.eff_stack with
   | [] -> raise (Invalid_argument "cannot pop empty stack")
-  | x :: _ -> get_val x
+  | x :: _ -> x

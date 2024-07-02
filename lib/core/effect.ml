@@ -37,6 +37,11 @@ let join_uvar a b =
   a := joined;
   b := joined
 
+let uvar_is_impure a =
+  match !a with
+  | EffImpure -> true
+  | _ -> false
+
 let pure = EffPure
 let not_pure = EffImpure
 let unknown = EffUnknown

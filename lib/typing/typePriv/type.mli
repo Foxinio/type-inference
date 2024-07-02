@@ -12,6 +12,7 @@ module Level : sig
   val increase_major : t -> t
   val compare_major : t -> t -> int
   val compare : t -> t -> int
+  val to_string : t -> string
 end
 
 type t
@@ -23,9 +24,8 @@ type view =
   | TInt
   | TVar   of TVar.t
   | TADT   of IMAstVar.t * Level.t * t list
-  | TGVar  of uvar * view option
   | TUVar  of uvar
-  | TArrow of Effect.t * t list * t
+  | TArrow of Effect.uvar * t * t
   | TPair  of t * t
 
 module Schema : sig
@@ -44,7 +44,6 @@ end
 module UVarSet : Set.S with type elt = uvar
 
 val fresh_uvar : Level.t -> t
-val fresh_gvar : Level.t -> t
 val fresh_tvar : unit -> t
 
 val t_unit   : t
@@ -52,9 +51,10 @@ val t_empty  : t
 val t_bool   : t
 val t_int    : t
 val t_var    : TVar.t -> t
-val t_arrow  : Effect.t -> t list -> t -> t
+val t_arrow  : Effect.t -> t -> t -> t
 val t_adt    : IMAstVar.t -> Level.t -> t list -> t
 val t_pair   : t -> t -> t
+val t_arrow_uvar  : Effect.uvar -> t -> t -> t
 
 val view  : t -> view
 
@@ -65,10 +65,11 @@ val foldl : (('a -> t -> 'a) -> 'a -> t -> 'a) -> 'a -> t -> 'a
 val set_uvar : uvar -> t -> unit
 val uvar_compare : uvar -> uvar -> int
 
-val merge : t -> t -> t
-val split : t -> t -> t
-val equal     : t -> t -> bool
-val subtype   : subtype:t -> supertype:t -> bool
-val supertype : supertype:t -> subtype:t -> bool
+(* val merge : t -> t -> t *)
+(* val split : t -> t -> t *)
+(* val equal     : t -> t -> bool *)
+(* val subtype   : subtype:t -> supertype:t -> bool *)
+(* val supertype : supertype:t -> subtype:t -> bool *)
 
 exception Cannot_compare of t * t
+exception Levels_difference of IMAstVar.t * Level.t * Level.t

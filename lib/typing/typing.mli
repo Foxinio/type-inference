@@ -53,9 +53,8 @@ module Type : sig
     | TInt
     | TVar    of TVar.t
     | TADT    of IMAstVar.t * Level.t * t list
-    | TGVar   of uvar * view option
     | TUVar   of uvar
-    | TArrow  of Effect.t * t list * t
+    | TArrow  of Effect.uvar * t * t
     | TPair   of t * t
 
   val view  : t -> view
@@ -65,22 +64,23 @@ module Type : sig
   val t_bool   : t
   val t_int    : t
   val t_var    : TVar.t -> t
-  val t_arrow  : Effect.t -> t list -> t -> t
+  val t_arrow  : Effect.t -> t -> t -> t
   val t_adt    : IMAstVar.t -> Level.t -> t list -> t
   val t_pair   : t -> t -> t
+  val t_arrow_uvar : Effect.uvar -> t -> t -> t
 
-  val merge : t -> t -> t
-  val split : t -> t -> t
-  val equal     : t -> t -> bool
-  val subtype   : subtype:t -> supertype:t -> bool
-  val supertype : supertype:t -> subtype:t -> bool
+  (* val merge : t -> t -> t *)
+  (* val split : t -> t -> t *)
+  (* val equal     : t -> t -> bool *)
+  (* val subtype   : subtype:t -> supertype:t -> bool *)
+  (* val supertype : supertype:t -> subtype:t -> bool *)
 
   exception Cannot_compare of t * t
+  exception Levels_difference of IMAstVar.t * Level.t * Level.t
 
   module UVarSet : Set.S with type elt = uvar
 
   val fresh_uvar : Level.t -> t
-  val fresh_gvar : Level.t -> t
   val fresh_tvar : unit -> t
   val set_uvar : uvar -> t -> unit
   val uvar_compare : uvar -> uvar -> int

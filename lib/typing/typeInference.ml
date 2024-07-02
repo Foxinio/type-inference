@@ -26,10 +26,10 @@ and convert_type node env explicit_type : Type.t =
   | Imast.THole -> Env.fresh_uvar env
   | Imast.TBool -> Type.t_bool
   | Imast.TInt  -> Type.t_int
-  | Imast.TArrow(eff, tps, tp) ->
-    let tps = List.map (convert_type node env) tps in
-    let tp = convert_type node env tp in
-    Type.t_arrow eff tps tp
+  | Imast.TArrow(eff, tp1, tp2) ->
+    let tp1 = convert_type node env tp1 in
+    let tp2 = convert_type node env tp2 in
+    Type.t_arrow eff tp1 tp2
   | Imast.TPair (tp1, tp2) ->
     let tp1 = convert_type node env tp1 in
     let tp2 = convert_type node env tp2 in
@@ -68,19 +68,9 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
     in mapping, instance_args
   in
   let convert_var env ((name,typ) : expl_type var) =
-    name, convert_type e env typ
-  in
-  let extend_list xs env =
-    let extend (tps1, tps2, env) x =
-      let name, expl = convert_var env x in
-      let new_tp = Env.fresh_uvar env in
-      Unify.subtype ~supertype:expl ~subtype:new_tp;
-      let new_typ = Schema.typ_mono new_tp in
-      (name, new_typ) :: tps1
-      , new_tp :: tps2
-      , Env.extend_gamma env (name,new_typ)
-    in
-    List.fold_left extend ([], [], env) xs
+      let expl = convert_type e env typ in
+      let new_typ = Schema.typ_mono expl in
+      (name, new_typ), expl
   in
   match e.data with
   | EUnit   -> EUnit,   Type.t_unit
@@ -91,7 +81,7 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
     let expl = convert_type e env typ in
     let arg = Env.fresh_uvar env in
     let res = Env.fresh_uvar env in
-    let tp = Type.t_arrow EffUnknown [arg] res |> Env.wrap_gvar env in
+    let tp = Type.t_arrow EffUnknown arg res in
     Unify.equal expl tp;
     EExtern (name, Schema.typ_mono expl, Schema.typ_mono arg), expl
 
@@ -103,48 +93,43 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
     Unify.subtype ~supertype:expl ~subtype:instantiated;
     EVar (name, schema), instantiated
 
-  | EFn(xs, body) ->
-    let xs, tps, env = extend_list xs env in
-    let env = Env.push_eff_uvar env in
+  | EFn(x, body) ->
+    let var, typ = convert_var env x in
+    let env = Env.extend_gamma env var in
+    let uve = Effect.fresh_uvar () in
+    let env = Env.push_eff_uvar env uve in
     let body' = infer env body in
-    EFn (xs, body'),
-    Type.t_arrow (Env.pop_eff_uvar env) tps (Schema.get_template body'.typ)
+    EFn (var, body'),
+    Type.t_arrow_uvar uve typ (Schema.get_template body'.typ)
 
-  | EFix(f, xs, body) ->
-    let xs, tps, env = extend_list xs env in
-    let env = Env.push_eff_uvar env in
+  | EFix(f, x, body) ->
+    let var, typ = convert_var env x in
+    let env = Env.extend_gamma env var in
+    let uve = Effect.fresh_uvar () in
+    let env = Env.push_eff_uvar env uve in
+    let f, tres = convert_var env f in
+    let f_tp = Type.t_arrow_uvar uve typ tres in
+    let env = Env.extend_gamma env f in
+    let body' = infer_and_check_type env body tres in
+    EFix(f, var, body'), f_tp
+
+  | EApp(e1, e2) ->
     let tp2 = Env.fresh_uvar env in
-    let (f, expl) = convert_var env f in
-    let f_tp = Type.t_arrow EffUnknown tps tp2 in
-    Unify.subtype ~supertype:expl ~subtype:f_tp;
-    let env = Env.extend_gamma env (f, Schema.typ_mono f_tp) in
-    let body' = infer_and_check_type env body tp2 in
-    let eff = Env.pop_eff_uvar env in
-    EFix((f, Schema.typ_mono f_tp), xs, body'),
-    Type.t_arrow eff tps tp2
-
-  | EApp(e1, es) ->
-    let generate _ = Env.fresh_uvar env in
-    let tps = List.map generate es in
     let tp1 = Env.fresh_uvar env in
-    let e1_tp = Type.t_arrow EffUnknown tps tp1 |> Env.wrap_gvar env in
+    let uve = Effect.fresh_uvar () in
+    let e1_tp = Type.t_arrow_uvar uve tp2 tp1 in
     let e1' = infer_and_check_type env e1 e1_tp in
-    begin match Schema.get_template e1'.typ |> Type.view with
-    | TArrow(EffImpure, _, _) -> Env.unpure_top_eff env
-    | TArrow((EffPure | EffUnknown), _,_) -> ()
-    | _ -> assert false
-    end;
-    let es' = List.map2 (fun e tp -> infer_and_check_type env e tp) es tps in
+    if Effect.uvar_is_impure uve then Env.unpure_top_eff env;
+    let es' = infer_and_check_type env e2 tp2 in
     EApp(e1', es'), tp1
 
-  | ELet(x, e1, e2) ->
+  | ELet((x,tp), e1, e2) ->
     let env' = Env.increase_level_major env in
-    let (x, tp) = convert_var env' x in
+    let tp = convert_type e env' tp in
     let e1' = infer_and_check_type env' e1 tp in
-    let e1_typ = (Schema.get_template e1'.typ) in
-    let x = x, Env.generalize env' e1_typ in
-    let e2' = infer (Env.extend_gamma env x) e2 in
-    ELet(x, e1', e2'), (Schema.get_template e2'.typ)
+    let e1_tp = Env.generalize env' (Schema.get_template e1'.typ) in
+    let e2' = infer (Env.extend_gamma env (x,e1_tp)) e2 in
+    ELet((x,e1_tp), e1', e2'), (Schema.get_template e2'.typ)
 
   | EPair(e1, e2) ->
     let e1' = infer env e1 in
@@ -178,7 +163,7 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
 
   | EType ((name,arg_list) as alias, ctor_defs, rest) ->
     let out_type = Env.fresh_uvar env in
-    let env = Env.increase_level_major env in
+    let env = Env.increase_level_minor env in
     let arg_list = List.map (fun x -> (x, Type.TVar.fresh ())) arg_list in
     let set = List.map snd arg_list |> Type.TVarSet.of_list in
     let arg_list = List.map (fun (x,t) -> x, Type.t_var t) arg_list in
@@ -244,6 +229,12 @@ and infer_and_check_type env e expected =
       "This expression has type %s, but an expression was expected of type %s."
       (pp_type ctx @@ (Schema.get_template e'.typ))
       (pp_type ctx expected)
+  | Type.Levels_difference (adt, adtlvl, uvarlvl) ->
+    Utils.report_error e
+      "Levels difference [%s>>%s]: %s escapes scope."
+      (Type.Level.to_string adtlvl)
+      (Type.Level.to_string uvarlvl)
+      (Env.lookup_var_name env adt)
 
 type program = Schema.typ Imast.expr * string Imast.VarTbl.t
 

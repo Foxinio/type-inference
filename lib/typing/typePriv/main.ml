@@ -6,16 +6,7 @@ module TVar = Tvar.Make()
 module TVarSet = TVar.MakeSet()
 module TVarMap = TVar.MakeMap()
 
-type t =
-  | TIUnit
-  | TIEmpty
-  | TIBool
-  | TIInt
-  | TIVar   of TVar.t
-  | TIADT   of IMAstVar.t * Level.t * t list
-  | TIUVar  of uvar
-  | TIArrow of Effect.t * t list * t
-  | TIPair  of t * t
+type t = view
 
 and uvar_value =
   | Realised of t
@@ -24,15 +15,6 @@ and uvar_value =
 and uvar_struct = {
   id: UVar.t;
   value: uvar_value;
-
-  (* gvar set means that it was created in abstraction application,
-   *   is an arrow and can be generalised to arrow that takes more arguments.
-   *
-   * (τ1, τ2, τ3, τ4) -> τ5
-   *    =>
-   * (τ1, τ2) -> (τ3, τ4) -> τ5
-   *)
-  is_gvar: bool;
 }
 
 and uvar = uvar_struct ref
@@ -43,20 +25,24 @@ and view =
   | TInt
   | TVar   of TVar.t
   | TADT   of IMAstVar.t * Level.t * t list
-  | TGVar  of uvar * view option
   | TUVar  of uvar
-  | TArrow of Effect.t * t list * t
+  | TArrow of Effect.uvar * t * t
   | TPair  of t * t
 
 exception Cannot_compare of t * t
+exception Levels_difference of IMAstVar.t * Level.t * Level.t
 
-let t_unit  = TIUnit
-let t_empty = TIEmpty
-let t_bool  = TIBool
-let t_int   = TIInt
-let t_var x = TIVar x
-let t_arrow eff tps tp2 = TIArrow(eff, tps, tp2)
-let t_adt name level tps = TIADT(name, level, tps)
-let t_pair tp1 tp2 = TIPair(tp1, tp2)
+let t_unit  = TUnit
+let t_empty = TEmpty
+let t_bool  = TBool
+let t_int   = TInt
+let t_var x = TVar x
+let t_arrow eff tps tp2 =
+  let uv = Effect.fresh_uvar () in
+  Effect.set_uvar uv eff;
+  TArrow(uv, tps, tp2)
+let t_arrow_uvar uv tps tp2 = TArrow(uv, tps, tp2)
+let t_adt name level tps = TADT(name, level, tps)
+let t_pair tp1 tp2 = TPair(tp1, tp2)
 
-let fresh_tvar () = TIVar (TVar.fresh ())
+let fresh_tvar () = TVar (TVar.fresh ())

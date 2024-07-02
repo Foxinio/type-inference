@@ -2,7 +2,6 @@ open Main
 open Uvar
 open Type_visitors
 
-let set_gvar x v = x := { !x with is_gvar=v }
 let id_of_uvar {contents={id;_}} = id
 
 type typ =
@@ -29,7 +28,7 @@ let instantiate ?(mapping=TVarMap.empty) level = function
         Seq.flat_map (fun x -> Seq.return (x, fresh_uvar level)) in
       let mapper = TVarMap.add_seq tvars_seq mapping in
       let instantiate default tp = match tp with
-        | TIVar x ->
+        | TVar x ->
             TVarMap.find_opt x mapper |> Option.value ~default:tp
         | tp -> default tp
       in map instantiate tp
@@ -45,13 +44,10 @@ let generalize accepted_level tp =
       UVartbl.add mapper x v;
       v
   in
-  let rec helper default tp = match tp with
-    | TIUVar ({contents={value=Realised _; is_gvar=true; _}} as x) ->
-      set_gvar x false;
-      helper default tp
-    | TIUVar ({contents={value=Unrealised level;_}} as x)
+  let helper default tp = match tp with
+    | TUVar ({contents={value=Unrealised level;_}} as x)
         when Level.compare_major level accepted_level = 0 ->
-      TIVar (lookup (id_of_uvar x))
+      TVar (lookup (id_of_uvar x))
     | tp -> default tp
   in 
   let tp = map helper tp in

@@ -11,3 +11,5 @@ let compare a b =
   match compare_major a b with
   | 0 -> compare (snd a) (snd b)
   | n -> n
+
+let to_string (major,minor) = string_of_int major ^ "." ^ string_of_int minor
