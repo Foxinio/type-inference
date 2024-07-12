@@ -8,6 +8,7 @@ module TVarSet = Type.TVarSet
 module TVarMap = Type.TVarMap
 
 module Schema = Schema
+module Effect = Type.Effect
 
 module Type = Type
 module PrettyPrint = PrettyPrinter

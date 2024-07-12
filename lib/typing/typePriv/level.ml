@@ -1,15 +1,20 @@
-type t = int * int
+type t = int * int * int
 
-let starting = 0, 0
+let starting = 0, 0, 0
 
-let increase_minor (major,minor) = (major,minor+1)
-let increase_major (major,minor) = (major+1,0)
+let increase_minor (major,minor, eff) = major,minor+1, eff
+let increase_major (major,minor, eff) = major+1,0, eff
+let increase_eff (major, minor, eff)  = major,minor, eff+1
 
-let compare_major (major1,_) (major2,_) = compare major1 major2
+let compare_major (major1,_,_) (major2,_,_) = compare major1 major2
+let compare_eff (_,_,eff1) (_,_,eff2) = compare eff1 eff2
 
-let compare a b =
-  match compare_major a b with
-  | 0 -> compare (snd a) (snd b)
-  | n -> n
+let compare (major1,minor1,_) (major2,minor2,_) =
+  let cmp = compare major1 major2 in
+  if cmp = 0
+  then compare minor1 minor2
+  else cmp
 
-let to_string (major,minor) = string_of_int major ^ "." ^ string_of_int minor
+let to_string (major,minor,eff) = string_of_int major ^ "."
+  ^ string_of_int minor ^ ";"
+  ^ string_of_int eff

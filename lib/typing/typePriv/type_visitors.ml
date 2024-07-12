@@ -23,7 +23,7 @@ let rec fold_map f init =
     | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar ({contents={value=Unrealised _;_}}) -> acc, t
     | TUVar ({contents={value=Realised tp;_}} as x) ->
       let acc, tp = fold_map f acc tp in
-      set_uvar x tp;
+      Uvar.set_uvar x tp;
       acc, TUVar x
     | TADT (name, lvl, tps) ->
       let acc, tps = List.fold_left_map (fold_map f) acc tps in
@@ -45,7 +45,7 @@ let rec map f : t -> t =
   let default t = match t with
     | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar ({contents={value=Unrealised _;_}}) -> t
     | TUVar ({contents={value=Realised tp;_}} as x) ->
-      set_uvar x (map f tp);
+      Uvar.set_uvar x (map f tp);
       TUVar x
     | TADT (name, lvl, tps) ->
       TADT (name, lvl, List.map (map f) tps)

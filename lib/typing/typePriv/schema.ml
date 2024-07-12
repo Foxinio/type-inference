@@ -1,10 +1,9 @@
 open Main
 open Uvar
 open Type_visitors
-module Effect = Core.Effect
-module EffUvSet = Core.Effect.EffUvSet
-module EffUvMap = Core.Effect.EffUvMap
-module EffUvTbl = Core.Effect.EffUvTbl
+module EffUvSet = Effect.EffUvSet
+module EffUvMap = Effect.EffUvMap
+module EffUvTbl = Effect.EffUvTbl
 
 let id_of_uvar {contents={id;_}} = id
 
@@ -23,14 +22,12 @@ let get_template = function
   | Mono t -> t
   | Schema (t, _, _) -> t
 
-let instatitate_schema mapping level tp tvars effvars =
-    let tvars_seq =
-      TVarSet.to_seq tvars
+let instatitate_schema mapping level (tp : t) tvars effvars =
+    let tvars_seq = TVarSet.to_seq tvars
       |> Seq.filter (fun x -> TVarMap.mem x mapping |> not)
-      |> Seq.map (fun x -> x, fresh_uvar level) in
-    let effmapper =
-      EffUvSet.to_seq effvars
-      |> Seq.map (fun x -> x, Effect.fresh_uvar ())
+      |> Seq.map (fun x -> x, Uvar.fresh_uvar level) in
+    let effmapper = EffUvSet.to_seq effvars
+      |> Seq.map (fun x -> x, Effect.fresh_uvar level)
       |> EffUvMap.of_seq in
     let mapper = TVarMap.add_seq tvars_seq mapping in
     let rec instantiate default tp = match tp with
@@ -57,9 +54,14 @@ let generalize accepted_level tp =
     match EffUvTbl.find_opt effmapper x with
     | Some x -> x
     | None   ->
-      let v = Effect.fresh_uvar () in
-      EffUvTbl.add effmapper x v;
-      v
+      let res = Effect.follow_link x in
+      begin match Effect.unwrap res with
+      | Unknown _ ->
+        EffUvTbl.add effmapper x res;
+        res
+      | Const _ -> x
+      | Link _ -> assert false
+      end
   and lookup_uv x =
     match UVartbl.find_opt uvmapper x with
     | Some x -> x
@@ -82,7 +84,6 @@ let generalize accepted_level tp =
     | tp -> default tp
   in 
   let tp = map helper tp in
-  let uvset = UVartbl.to_seq uvmapper |> Seq.unzip |> snd |> TVarSet.of_seq in
-  let effset =
-    EffUvTbl.to_seq effmapper |> Seq.unzip |> snd |> EffUvSet.of_seq in
+  let uvset  = UVartbl.to_seq_values uvmapper |> TVarSet.of_seq in
+  let effset = EffUvTbl.to_seq_values effmapper |> EffUvSet.of_seq in
   Schema (tp, uvset, effset)

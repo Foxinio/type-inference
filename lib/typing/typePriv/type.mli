@@ -1,19 +1,11 @@
-open Core
-open Imast
+open Core.Imast
 
-module TVar : Var.VAR
+module TVar : Core.Var.VAR
 module TVarSet : Set.S with type elt = TVar.t
 module TVarMap : Map.S with type key = TVar.t
 
-module Level : sig
-  type t
-  val starting : t
-  val increase_minor : t -> t
-  val increase_major : t -> t
-  val compare_major : t -> t -> int
-  val compare : t -> t -> int
-  val to_string : t -> string
-end
+module Level : module type of Level
+module Effect : module type of Effect
 
 type t
 type uvar
@@ -51,10 +43,9 @@ val t_empty  : t
 val t_bool   : t
 val t_int    : t
 val t_var    : TVar.t -> t
-val t_arrow  : Effect.t -> t -> t -> t
+val t_arrow  : Effect.uvar -> t -> t -> t
 val t_adt    : IMAstVar.t -> Level.t -> t list -> t
 val t_pair   : t -> t -> t
-val t_arrow_uvar  : Effect.uvar -> t -> t -> t
 
 val view  : t -> view
 

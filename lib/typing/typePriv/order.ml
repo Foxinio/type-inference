@@ -1,5 +1,6 @@
 open Main
-open Core
+open Core.Imast
+
 (*
 
 (* TODO: Fix this mess *)
@@ -212,7 +213,7 @@ let rec equal t1 t2 = match t1, t2 with
 
   | TADT (new_adt, new_lvl, new_tps),
     TADT (cur_adt, cur_lvl, cur_tps)
-      when Imast.IMAstVar.compare new_adt cur_adt = 0
+      when IMAstVar.compare new_adt cur_adt = 0
       && List.equal equal new_tps cur_tps ->
       assert (cur_lvl = new_lvl);
       true

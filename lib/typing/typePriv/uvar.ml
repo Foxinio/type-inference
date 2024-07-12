@@ -1,5 +1,4 @@
 open Main
-open Order
 
 let makeUvar gvar level =
   { value=Unrealised level; id=UVar.fresh (); }

@@ -1,19 +1,13 @@
-open Core
-open Imast
+open Core.Imast
+open Type
 
 
-module TVar : Var.VAR
+module TVar : Core.Var.VAR
 module TVarSet : Set.S with type elt = TVar.t
 module TVarMap : Map.S with type key = TVar.t
 
-module Level : sig
-  type t
-  val starting : t
-  val increase_minor : t -> t
-  val increase_major : t -> t
-  val compare_major : t -> t -> int
-  val compare : t -> t -> int
-end
+module Level : module type of Level
+module Effect : module type of Effect
 
 module PrettyPrint : sig
   type ('a, 'b, 'c) ctx
@@ -27,64 +21,12 @@ end
 
 module Schema : sig
   type t
-  type typ
-
-  val typ_mono : t -> typ
-  val typ_schema : TVarSet.t -> t -> typ
-
-  val instantiate : ?mapping:t TVarMap.t -> Type.Level.t -> typ -> t
-  val generalize : Type.Level.t -> t -> typ
-
-  val get_arguments : typ -> TVarSet.t
-  val get_template : typ -> t
+  include module type of Schema
 end
 
-type program = Schema.typ Imast.expr * string Imast.VarTbl.t
+include module type of TypeInference
 
-val infer : Imast.program -> program
-
-module Type : sig
-  type t = Schema.t
-  type uvar
-  type view =
-    | TUnit
-    | TEmpty
-    | TBool
-    | TInt
-    | TVar    of TVar.t
-    | TADT    of IMAstVar.t * Level.t * t list
-    | TUVar   of uvar
-    | TArrow  of Effect.uvar * t * t
-    | TPair   of t * t
-
-  val view  : t -> view
-
-  val t_unit   : t
-  val t_empty  : t
-  val t_bool   : t
-  val t_int    : t
-  val t_var    : TVar.t -> t
-  val t_arrow  : Effect.t -> t -> t -> t
-  val t_adt    : IMAstVar.t -> Level.t -> t list -> t
-  val t_pair   : t -> t -> t
-  val t_arrow_uvar : Effect.uvar -> t -> t -> t
-
-  (* val merge : t -> t -> t *)
-  (* val split : t -> t -> t *)
-  val equal     : t -> t -> bool
-  (* val subtype   : subtype:t -> supertype:t -> bool *)
-  (* val supertype : supertype:t -> subtype:t -> bool *)
-
-  exception Cannot_compare of t * t
-  exception Levels_difference of IMAstVar.t * Level.t * Level.t
-
-  module UVarSet : Set.S with type elt = uvar
-
-  val fresh_uvar : Level.t -> t
-  val fresh_tvar : unit -> t
-  val set_uvar : uvar -> t -> unit
-  val uvar_compare : uvar -> uvar -> int
-
-end
+module Type : module type of Type
+with type t = Schema.t
 
 
