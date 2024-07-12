@@ -1,16 +1,17 @@
 module Coerse = SystemF.Coerse
+module Folding = SystemF.Folding
 open Typing
 open Core
 
 let extract_eff (e : Schema.typ Imast.expr) = 
   match Schema.get_template e.typ |> Type.view with
-  | Type.TArrow(eff, _, _) -> eff
+  | Type.TArrow(eff, _, _) -> Effect.get_val eff
   | _ -> raise (Invalid_argument "cannot extract from non-arrow")
 
 let rec tr_type env (tp : Type.t) : SystemF.tp =
   let open Type in
   match view tp with
-  | TUVar _ | TGVar _ ->
+  | TUVar _ ->
     failwith "Unification variable unrealized"
   | TUnit -> SystemF.TUnit
   | TEmpty -> SystemF.TEmpty
@@ -18,7 +19,8 @@ let rec tr_type env (tp : Type.t) : SystemF.tp =
   | TInt  -> SystemF.TInt
   | TVar x -> SystemF.TVar (Env.lookup_tvar env x)
   | TArrow(eff, tps, tp) ->
-    SystemF.TArrow(eff, List.map (tr_type env) tps, tr_type env tp)
+    let fvar = Folding.fresh () in
+    SystemF.TArrow(eff, fvar, [tr_type env tps], tr_type env tp)
   | TPair(tp1, tp2) ->
     SystemF.TPair(tr_type env tp1, tr_type env tp2)
   | TADT(a, _, tps) ->
@@ -44,27 +46,20 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
     let arg1' = tr_type env @@ Schema.get_template arg1 in
     SystemF.EExtern (name, tp', arg1')
 
-  | Imast.EFn(xs, body) ->
-    let lst = List.map (tr_var env) xs in
-    SystemF.EFn(lst, tr_expr env body, extract_eff e)
+  | Imast.EFn(x, body) ->
+    let x' = tr_var env x in
+    SystemF.EFn([x'], tr_expr env body, extract_eff e)
 
-  | Imast.EFix(f, xs, body) ->
+  | Imast.EFix(f, x, body) ->
     let f, _ = tr_var env f in
-    let lst = List.map (tr_var env) xs in
+    let x' = tr_var env x in
     let tpres = tr_type env @@ Schema.get_template body.typ in
-    SystemF.EFix(f, lst, tpres, tr_expr env e, extract_eff e)
+    SystemF.EFix(f, [x'], tpres, tr_expr env e, extract_eff e)
 
-  | Imast.EApp(e1, es) ->
-    let rec inner e1 es tp = 
-      begin match Type.view tp with
-      | Type.TArrow (eff, tps, tpres) ->
-        let es, es' = Utils.split_list es (List.length tps) in
-        let es = List.map2 (add_coersion env) es tps in
-        let e1' = SystemF.EApp (e1, es) in
-        inner e1' es' tpres
-      | _ -> failwith "internal error"
-      end in
-    inner (tr_expr env e1) es @@ Schema.get_template e1.typ
+  | Imast.EApp(e1, e2) ->
+    let e1 = tr_expr env e1 in
+    let e2 = tr_expr env e2 in
+    SystemF.EApp (e1, [e2])
 
   | Imast.ELet((x, tp), e1, e2) ->
     let env', tvars = Env.extend_tvar env
@@ -162,7 +157,7 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
         | Either.Left tps ->
           SystemF.CId (SystemF.TArrow (tps, Coerse.unwrap_id coerse_res |> Option.get))
         | Either.Right coers ->
-          SystemF.CArrow (coers, coerse_res)
+          SystemF.CPArrow (coers, coerse_res)
       (* TODO: Reverse direction of inequation *)
       (* ~this should be correct right now *)
       else if len_from < len_to then

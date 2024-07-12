@@ -1,4 +1,4 @@
-module IMAstVar = Tvar.Make()
+module IMAstVar = Var.Make()
 module VarTbl = IMAstVar.MakeHashtbl()
 
 include Ast.Make(struct

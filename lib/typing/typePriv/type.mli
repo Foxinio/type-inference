@@ -1,7 +1,7 @@
 open Core
 open Imast
 
-module TVar : Tvar.TVar_S
+module TVar : Var.VAR
 module TVarSet : Set.S with type elt = TVar.t
 module TVarMap : Map.S with type key = TVar.t
 
@@ -67,7 +67,7 @@ val uvar_compare : uvar -> uvar -> int
 
 (* val merge : t -> t -> t *)
 (* val split : t -> t -> t *)
-(* val equal     : t -> t -> bool *)
+val equal     : t -> t -> bool
 (* val subtype   : subtype:t -> supertype:t -> bool *)
 (* val supertype : supertype:t -> subtype:t -> bool *)
 

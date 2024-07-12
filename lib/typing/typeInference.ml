@@ -36,7 +36,8 @@ and convert_type node env explicit_type : Type.t =
     Type.t_pair tp1 tp2
   | Imast.TVar name -> 
     let tp = Env.lookup_delta env name |> unwrap name in
-    if Type.TVarSet.is_empty (Schema.get_arguments tp) then Env.instantiate env tp
+    if Type.TVarSet.is_empty (Schema.get_arguments tp)
+    then Env.instantiate env tp
     else
       Utils.report_error node
         "Alias used without parameters: %s"
@@ -106,6 +107,8 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
     let var, typ = convert_var env x in
     let env = Env.extend_gamma env var in
     let uve = Effect.fresh_uvar () in
+    Env.unpure_top_eff env;
+    (* since its EFix this has to be impure *)
     let env = Env.push_eff_uvar env uve in
     let f, tres = convert_var env f in
     let f_tp = Type.t_arrow_uvar uve typ tres in
@@ -170,7 +173,9 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
     let tvars = List.map snd arg_list in
     let env = Env.extend_delta_with_adt env name tvars set in
     let env' = Env.extend_delta_of_list env arg_list in
-    let f (name, typ) = name, convert_type e env' typ |> Schema.typ_schema set in
+    let f (name, typ) =
+      let typ = convert_type e env' typ  in
+      name, Schema.typ_schema set typ in
     let ctor_defs' = List.map f ctor_defs in
     let env = Env.extend_by_ctors env ctor_defs' name tvars set  in
     let rest' = infer_and_check_type env rest out_type in
@@ -196,6 +201,11 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
     ETypeAlias(alias, typ', rest'), (Schema.get_template rest'.typ)
 
   | EMatch (sub_expr, ((ctor_name, _, _) :: _ as clauses)) ->
+    Env.unpure_top_eff env;
+    (* ASK *)
+    (* since we allow recursive types this may result in a loop,
+        making this impure *)
+
     let _, adt_typ = Env.lookup_ctor env ctor_name |> unwrap ctor_name in
     let var_set = Schema.get_arguments adt_typ in
     let mapping, instance_args = gen_mapping var_set in
@@ -205,9 +215,12 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
     let f (ctor_name, (var_name, var_type), e) =
       let typ, _ = Env.lookup_ctor env ctor_name |> unwrap ctor_name in
       let expected_type = Env.instantiate ~mapping env typ in
-      Unify.subtype ~supertype:expected_type ~subtype:(convert_type e env var_type);
-      let env = Env.extend_gamma env (var_name, Schema.typ_mono expected_type) in
-      ctor_name, (var_name, Schema.typ_mono expected_type), infer_and_check_type env e out_type
+      Unify.subtype
+        ~supertype:expected_type
+        ~subtype:(convert_type e env var_type);
+      let typ = Schema.typ_mono expected_type in
+      let env = Env.extend_gamma env (var_name, typ) in
+      ctor_name, (var_name, typ), infer_and_check_type env e out_type
     in
     let clauses' = List.map f clauses in
     EMatch (sub_expr', clauses'), out_type

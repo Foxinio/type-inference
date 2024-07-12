@@ -73,6 +73,7 @@ let rec pp_type ctx lvl tp =
     | TUVar x -> pp_context_lookup (UVar x) ctx
     | TArrow(uve, targ, tres) ->
       let arr_str =
+        let open Core.Effect in
         match !uve with
         | EffPure -> "->"
         | EffUnknown -> "->?"

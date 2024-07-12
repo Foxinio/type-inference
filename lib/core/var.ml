@@ -1,9 +1,10 @@
-module type TVar_S = sig
+module type VAR = sig
   type t
 
   val compare : t -> t -> int
 
   val fresh : unit -> t
+  val hash : t -> int
 
   module MakeMap() : Map.S with type key = t
   module MakeSet() : Set.S with type elt = t
@@ -18,6 +19,8 @@ module Make() = struct
     let x = !next_fresh in
     next_fresh := x + 1;
     x
+
+  let hash = Int.hash
 
   module MakeMap() = Map.Make(Int)
   module MakeSet() = Set.Make(Int)

@@ -1,8 +1,8 @@
 open Core.Imast
 open Core
 
-module UVar = Tvar.Make()
-module TVar = Tvar.Make()
+module UVar = Var.Make()
+module TVar = Var.Make()
 module TVarSet = TVar.MakeSet()
 module TVarMap = TVar.MakeMap()
 

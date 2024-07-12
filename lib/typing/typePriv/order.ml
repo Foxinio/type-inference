@@ -193,12 +193,13 @@ and split_with_uvar ?(loop=false) x tp =
   | {value=Realised new_tp;_}, Right current_tp
   | {value=Realised current_tp;_}, Left new_tp ->
     split new_tp current_tp
+*)
 
-and equal t1 t2 = match t1, t2 with
+let rec equal t1 t2 = match t1, t2 with
   | TUVar x, _ ->
-    equal_with_uvar x (Either.Right t2)
+    equal_with_uvar x t2
   | _, TUVar x ->
-    equal_with_uvar x (Either.Left t1)
+    equal_with_uvar x t1
 
   | TUnit, TUnit -> true
   | TUnit, _ -> false
@@ -222,27 +223,27 @@ and equal t1 t2 = match t1, t2 with
   | TInt, TInt -> true
   | TInt, _ -> false
 
-  | TArrow (effb, tpsa, tp_resa),
-    TArrow (effa, tpsb, tp_resb) when List.length tpsa = List.length tpsb ->
-    equal tp_resa tp_resb
-    && List.equal equal tpsa tpsb
-    && effa = effb
+  | TArrow (effb, targa, tresa),
+    TArrow (effa, targb, tresb) ->
+    let open Effect in
+    equal tresa tresb
+    && equal targa targb
+    && equal_mod_known !effa !effb
   | TArrow _, _ -> false
 
   | TPair(tp1a, tp1b), TPair(tp2a, tp2b) ->
       equal tp1a tp2a && equal tp1b tp2b
   | TPair _, _ -> false
 
-and equal_with_uvar ?(loop=false) x tp =
+and equal_with_uvar x tp =
   match !x, tp with
-  | {value=Unrealised _;_}, Right tp
-  | {value=Unrealised _;_}, Left tp ->
+  | {value=Unrealised _;_}, _ ->
     true
-  | {value=Realised tp1;_}, Right tp2
-  | {value=Realised tp2;_}, Left tp1 ->
+  | {value=Realised tp2;_}, tp1 ->
     equal tp1 tp2
 
 
+(*
 and subtype_impl subtype supertype =
   match subtype, supertype with
   | TUVar x, _ ->
@@ -312,3 +313,4 @@ let subtype ~subtype ~supertype =
   subtype_impl subtype supertype
 
 *)
+

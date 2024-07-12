@@ -2,12 +2,25 @@ open Core
 open Imast
 
 
-module TVar : Tvar.TVar_S
+module TVar : Var.VAR
 
 type adtvar = IMAstVar.t
 type tvar = TVar.t
 type var  = IMAstVar.t
 type name = IMAstVar.t
+
+module Folding : sig
+  type t =
+    | Folded
+    | Unfolded
+  type uvar
+
+  val is_folded : uvar -> bool
+  val view      : uvar -> t
+  val compare   : uvar -> uvar -> int
+  val fresh     : unit -> uvar
+  val set_uvar  : uvar -> t -> unit
+end
 
 type tp =
   | TUnit
@@ -15,7 +28,7 @@ type tp =
   | TBool
   | TInt
   | TVar     of tvar
-  | TArrow   of Effect.t * tp list * tp
+  | TArrow   of Effect.uvar * Folding.uvar * tp list * tp
   | TADT     of adtvar * tp list
   | TForallT of tvar list * tp
   | TPair    of tp * tp
@@ -23,7 +36,7 @@ type tp =
 type coersion =
   | CId       of tp
   | CBot      of tp
-  | CArrow    of Effect.t * coersion list * coersion
+  | CPArrow    of Effect.t * coersion list * coersion
   | CForallT  of tvar list * coersion
   | CPair     of coersion * coersion
   | CMrgArrow  of coersion list * coersion
