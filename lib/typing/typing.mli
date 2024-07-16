@@ -7,7 +7,6 @@ module TVarSet : Set.S with type elt = TVar.t
 module TVarMap : Map.S with type key = TVar.t
 
 module Level : module type of Level
-module Effect : module type of Effect
 
 module PrettyPrint : sig
   type ('a, 'b, 'c) ctx

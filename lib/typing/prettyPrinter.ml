@@ -71,16 +71,9 @@ let rec pp_type ctx lvl tp =
     | TBool  -> "Bool"
     | TInt   -> "Int"
     | TUVar x -> pp_context_lookup (UVar x) ctx
-    | TArrow(uve, targ, tres) ->
-      let arr_str =
-        let open Effect in
-        match !uve with
-        | EffPure -> "->"
-        | EffUnknown -> "->?"
-        | EffImpure -> "->[]"
-      in
+    | TArrow(targ, tres) ->
       pp_at_level 0 lvl
-        (Printf.sprintf "%s %s %s" (pp_type ctx 0 targ) arr_str (pp_type ctx 0 tres))
+        (Printf.sprintf "%s -> %s" (pp_type ctx 0 targ) (pp_type ctx 0 tres))
     | TPair(tp1, tp2) ->
       pp_at_level 2 lvl
         (Printf.sprintf "%s * %s"

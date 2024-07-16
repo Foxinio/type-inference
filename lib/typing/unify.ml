@@ -28,19 +28,6 @@ let unify_with_uvar x tp =
   if contains_uvar x tp then raise Cannot_unify
   else Type.set_uvar x tp
 
-let rec unify_eff_uvars a b =
-  match Effect.unwrap a, Effect.unwrap b with
-  | Unknown _, _ ->
-    Effect.link_uvar a b
-  | _, Unknown _ ->
-    Effect.link_uvar b a
-  | Link _, _ ->
-    unify_eff_uvars (Effect.follow_link a) b
-  | _, Link _ ->
-    unify_eff_uvars a (Effect.follow_link b)
-  | Const a, Const b when Core.Effect.compare a b = 0 -> ()
-  | _ -> raise Cannot_unify
-
 let rec equal tp1 tp2 =
   match Type.view tp1, Type.view tp2 with
   | TUVar (x), TUVar (y) when x == y -> ()
@@ -69,8 +56,7 @@ let rec equal tp1 tp2 =
   | TInt, TInt -> ()
   | TInt, _ -> raise Cannot_unify
 
-  | TArrow(effa, ta1, tb1), TArrow(effb, ta2, tb2) ->
-    unify_eff_uvars effa effb;
+  | TArrow(ta1, tb1), TArrow(ta2, tb2) ->
     equal ta1 ta2;
     equal tb1 tb2
   | TArrow _, _ -> raise Cannot_unify
@@ -82,8 +68,7 @@ let rec equal tp1 tp2 =
 
 let rec unify_subtype supertype subtype =
   match Type.view supertype, Type.view subtype with
-  | TArrow(effa, tp1a, tp1b), TArrow(effb, tp2a, tp2b) ->
-    unify_eff_uvars effa effb;
+  | TArrow(tp1a, tp1b), TArrow(tp2a, tp2b) ->
     unify_subtype tp2a tp1a;
     unify_subtype tp1b tp2b
   | TArrow _, _ -> raise Cannot_unify

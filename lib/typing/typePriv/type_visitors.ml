@@ -9,7 +9,7 @@ let rec iter f : t -> unit =
       iter f tp
     | TADT (_, _, tps) ->
        List.iter (iter f) tps
-    | TArrow (_, tps, tp) ->
+    | TArrow (tps, tp) ->
       iter f tps;
       iter f tp
     | TPair (tp1, tp2) ->
@@ -28,10 +28,10 @@ let rec fold_map f init =
     | TADT (name, lvl, tps) ->
       let acc, tps = List.fold_left_map (fold_map f) acc tps in
       acc, TADT (name, lvl, tps)
-    | TArrow (eff, tps, tp) ->
+    | TArrow (tps, tp) ->
       let acc, tps = fold_map f acc tps in
       let acc, tp = fold_map f acc tp in
-      acc, TArrow (eff, tps, tp)
+      acc, TArrow (tps, tp)
     | TPair (tp1, tp2) ->
       let acc, tp1 = fold_map f acc tp1 in
       let acc, tp2 = fold_map f acc tp2 in
@@ -49,8 +49,8 @@ let rec map f : t -> t =
       TUVar x
     | TADT (name, lvl, tps) ->
       TADT (name, lvl, List.map (map f) tps)
-    | TArrow (eff, tps, tp) ->
-      TArrow (eff, map f tps, map f tp)
+    | TArrow (tps, tp) ->
+      TArrow (map f tps, map f tp)
     | TPair (tp1, tp2) ->
       TPair (map f tp1, map f tp2)
   in
@@ -67,7 +67,7 @@ let rec foldl f init t =
       let init = foldl f (f default init tp1) tp1 in
       let init = foldl f (f default init tp2) tp2 in
       init
-    | TArrow (_, tps, tp) ->
+    | TArrow (tps, tp) ->
       foldl f (f default init tp) tps
   in
   foldl f (f default init t) t

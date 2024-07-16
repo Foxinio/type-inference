@@ -18,15 +18,14 @@ let unwrap node env var opt =
 let make_mono tp eff =
   Schema.typ_mono tp, eff
 
-let get_tp ({typ=typ,_;_} : (Schema.typ*Effect.t) expr) =
+let get_tp ({typ;_} : Schema.typ expr) =
   Schema.get_template typ
-let get_eff ({typ=_,eff;_} : (Schema.typ*Effect.t) expr) = eff
 
 (** inference function *)
 let rec infer env (node : Imast.expl_type Imast.expr) =
-  let data, typ, eff = infer_type env node in
+  let data, typ = infer_type env node in
   Unify.subtype ~supertype:(convert_type node env node.typ) ~subtype:typ;
-  { node with data; typ=(Schema.typ_mono typ, eff) }
+  { node with data; typ=Schema.typ_mono typ }
 
 and convert_type node env explicit_type : Type.t =
   let unwrap = unwrap node env in
@@ -38,8 +37,7 @@ and convert_type node env explicit_type : Type.t =
   | Imast.TArrow(eff, tp1, tp2) ->
     let tp1 = convert_type node env tp1 in
     let tp2 = convert_type node env tp2 in
-    let uv  = Env.wrap_eff_uvar env eff in
-    Type.t_arrow uv tp1 tp2
+    Type.t_arrow tp1 tp2
   | Imast.TPair (tp1, tp2) ->
     let tp1 = convert_type node env tp1 in
     let tp2 = convert_type node env tp2 in
@@ -81,24 +79,21 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
   let convert_var env ((name,typ) : expl_type var) =
       let expl = convert_type e env typ in
       let new_typ = Schema.typ_mono expl in
-      (name, (new_typ, Effect.EffPure)), expl
+      (name, new_typ), expl
   in
   match e.data with
-  | EUnit   -> EUnit,   Type.t_unit, Effect.EffPure
-  | EBool b -> EBool b, Type.t_bool, Effect.EffPure
-  | ENum  n -> ENum  n, Type.t_int, Effect.EffPure
+  | EUnit   -> EUnit,   Type.t_unit
+  | EBool b -> EBool b, Type.t_bool
+  | ENum  n -> ENum  n, Type.t_int
 
   | EExtern (name, typ, _) ->
     let expl = convert_type e env typ in
     let arg = Env.fresh_uvar env in
     let res = Env.fresh_uvar env in
-    let uve = Env.fresh_eff_uvar env in
-    let tp = Type.t_arrow uve arg res in
+    let tp = Type.t_arrow arg res in
     Unify.equal expl tp;
-    EExtern (name, make_mono expl (Effect.view uve),
-      make_mono arg Effect.EffUnknown),
-    expl,
-    Effect.view uve
+    EExtern (name, Schema.typ_mono expl, Schema.typ_mono arg),
+    expl
 
   | EVar  (name,typ) ->
     let expl = convert_type e env typ in
@@ -106,77 +101,68 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
       |> unwrap name in
     let instantiated = Env.instantiate env schema in
     Unify.subtype ~supertype:expl ~subtype:instantiated;
-    EVar (name, (schema, EffPure)), instantiated, Effect.EffPure
+    EVar (name, schema), instantiated
 
   | EFn(x, body) ->
     let var, typ = convert_var env x in
     let env = Env.extend_gamma env var in
     let body' = infer env body in
-    let uve = Env.wrap_eff_uvar env @@ get_eff body' in
     EFn (var, body'),
-    Type.t_arrow uve typ (get_tp body'),
-    EffPure
+    Type.t_arrow typ (get_tp body')
 
   | EFix(f, x, body) ->
     let var, typ = convert_var env x in
     let env = Env.extend_gamma env var in
-    (* since its EFix this has to be impure *)
     let f, tres = convert_var env f in
-    let uve = Env.wrap_eff_uvar env Effect.EffImpure in
-    let f_tp = Type.t_arrow uve typ tres in
+    let f_tp = Type.t_arrow typ tres in
     let env = Env.extend_gamma env f in
     let body' = infer_and_check_type env body tres in
-    EFix(f, var, body'), f_tp, Effect.EffPure
+    EFix(f, var, body'), f_tp
 
   | EApp(e1, e2) ->
     let tp2 = Env.fresh_uvar env in
     let tp1 = Env.fresh_uvar env in
-    let uve = Env.fresh_eff_uvar env in
-    let e1_tp = Type.t_arrow uve tp2 tp1 in
+    let e1_tp = Type.t_arrow tp2 tp1 in
     let e1' = infer_and_check_type env e1 e1_tp in
     let e2' = infer_and_check_type env e2 tp2 in
-    EApp(e1', e2'), tp1, Effect.view uve
+    EApp(e1', e2'), tp1
 
   | ELet((x,tp), e1, e2) ->
     let env' = Env.increase_level_major env in
     let tp = convert_type e env' tp in
     let e1' = infer_and_check_type env' e1 tp in
     (* TODO: Add value restriction *)
-    let x = x, (Env.generalize env' (get_tp e1'), Effect.EffPure) in
+    let x = x, Env.generalize env' (get_tp e1') in
     let e2' = infer (Env.extend_gamma env x) e2 in
-    ELet(x, e1', e2'), get_tp e2', get_eff e2'
+    ELet(x, e1', e2'), get_tp e2'
 
   | EPair(e1, e2) ->
     let e1' = infer env e1 in
     let e2' = infer env e2 in
-    let eff = Effect.join (get_eff e1') (get_eff e2') in
-    EPair(e1', e2'), Type.t_pair (get_tp e1') (get_tp e2'), eff
+    EPair(e1', e2'), Type.t_pair (get_tp e1') (get_tp e2')
 
   | EFst e ->
     let tp1 = Env.fresh_uvar env in
     let tp2 = Env.fresh_uvar env in
     let e' = infer_and_check_type env e (Type.t_pair tp1 tp2) in
-    EFst e', tp1, get_eff e'
+    EFst e', tp1
   | ESnd e ->
     let tp1 = Env.fresh_uvar env in
     let tp2 = Env.fresh_uvar env in
     let e' = infer_and_check_type env e (Type.t_pair tp1 tp2) in
-    ESnd e', tp2, get_eff e'
+    ESnd e', tp2
 
   | EIf(e1, e2, e3) ->
     let e1' = infer_and_check_type env e1 Type.t_bool in
     let e2' = infer env e2 in
     let res_tp = get_tp e2' in
     let e3' = infer_and_check_type env e3 res_tp in
-    let eff = Effect.join (get_eff e1') (get_eff e2') in
-    let eff = Effect.join eff (get_eff e3') in
-    EIf(e1', e2', e3'), res_tp, eff
+    EIf(e1', e2', e3'), res_tp
 
   | ESeq(e1, e2) ->
     let e1' = infer_and_check_type env e1 Type.t_unit in
     let e2' = infer env e2 in
-    let eff = Effect.join (get_eff e1') (get_eff e2') in
-    ESeq(e1', e2'), get_tp e2', eff
+    ESeq(e1', e2'), get_tp e2'
 
   | EType ((name,arg_list) as alias, ctor_defs, rest) ->
     let out_type = Env.fresh_uvar env in
@@ -189,11 +175,11 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
     let env' = Env.extend_delta_of_list env arg_list in
     let f (name, typ) =
       let typ = convert_type e env' typ  in
-      name, (Schema.typ_schema set typ, Effect.EffPure) in
+      name, Schema.typ_schema set typ in
     let ctor_defs' = List.map f ctor_defs in
     let env = Env.extend_by_ctors env ctor_defs' name tvars set  in
     let rest' = infer_and_check_type env rest out_type in
-    EType(alias, ctor_defs', rest'), get_tp rest', get_eff rest'
+    EType(alias, ctor_defs', rest'), get_tp rest'
 
   | ECtor (name, body) ->
     let expected_typ, alias_typ = Env.lookup_ctor env name |> unwrap name in
@@ -202,7 +188,7 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
     let expected_type = Env.instantiate ~mapping env expected_typ in
     let alias_t = Env.instantiate ~mapping env alias_typ in
     let body' = infer_and_check_type env body expected_type in
-    ECtor (name, body'), alias_t, Effect.EffPure
+    ECtor (name, body'), alias_t
 
   | ETypeAlias ((name, arg_list) as alias, typ, rest) ->
     let arg_list = List.map (fun x -> (x, Type.TVar.fresh ())) arg_list in
@@ -211,14 +197,10 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
     let env' = Env.extend_delta_of_list env arg_list in
     let typ' = convert_type e env' typ |> Schema.typ_schema set in
     let env = Env.extend_delta_with_alias env (name, typ') in
-    let typ' = typ', Effect.EffPure in
     let rest' = infer env rest in
-    ETypeAlias(alias, typ', rest'), get_tp rest', get_eff rest'
+    ETypeAlias(alias, typ', rest'), get_tp rest'
 
   | EMatch (sub_expr, ((ctor_name, _, _) :: _ as clauses)) ->
-    (* since we allow recursive types this may result in a loop,
-        making this impure *)
-
     let _, adt_typ = Env.lookup_ctor env ctor_name |> unwrap ctor_name in
     let var_set = Schema.get_arguments adt_typ in
     let mapping, instance_args = gen_mapping var_set in
@@ -231,16 +213,16 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
       Unify.subtype
         ~supertype:expected_type
         ~subtype:(convert_type e env var_type);
-      let typ = Schema.typ_mono expected_type, Effect.EffPure in
+      let typ = Schema.typ_mono expected_type in
       let env = Env.extend_gamma env (var_name, typ) in
       ctor_name, (var_name, typ), infer_and_check_type env e out_type
     in
     let clauses' = List.map f clauses in
-    EMatch (sub_expr', clauses'), out_type, Effect.EffImpure
+    EMatch (sub_expr', clauses'), out_type
 
   | EMatch (sub_expr, []) ->
     let sub_expr' = infer_and_check_type env sub_expr Type.t_empty in
-    EMatch (sub_expr', []), Env.fresh_uvar env, get_eff sub_expr'
+    EMatch (sub_expr', []), Env.fresh_uvar env
 
 and infer_and_check_type env e expected =
   let open PrettyPrinter in
@@ -264,11 +246,11 @@ and infer_and_check_type env e expected =
       (Type.Level.to_string uvarlvl)
       (Env.lookup_var_name env adt)
 
-type program = (Schema.typ * Effect.t) Imast.expr * string Imast.VarTbl.t
+type program = Schema.typ Imast.expr * string Imast.VarTbl.t
 
 let infer ((p, env) : Imast.program) : program =
   let inner_env = Env.of_var_names env in
-  let data, typ, eff = infer_type inner_env p in
+  let data, typ = infer_type inner_env p in
   (* should be a better way to return generalized type *)
   let typ = Schema.generalize Type.Level.starting typ in
-  { p with data; typ=typ,eff }, env
+  { p with data; typ }, env

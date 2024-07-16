@@ -33,7 +33,7 @@ and lower_uvar_level level' x (tp : t) =
         inner  tp
       | TADT (_, _, tps) ->
          List.iter inner tps
-      | TArrow (_, targ, tres) ->
+      | TArrow (targ, tres) ->
         inner targ;
         inner tres
       | TPair (tp1, tp2) ->

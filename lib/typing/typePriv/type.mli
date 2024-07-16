@@ -5,7 +5,6 @@ module TVarSet : Set.S with type elt = TVar.t
 module TVarMap : Map.S with type key = TVar.t
 
 module Level : module type of Level
-module Effect : module type of Effect
 
 type t
 type uvar
@@ -17,7 +16,7 @@ type view =
   | TVar   of TVar.t
   | TADT   of IMAstVar.t * Level.t * t list
   | TUVar  of uvar
-  | TArrow of Effect.uvar * t * t
+  | TArrow of t * t
   | TPair  of t * t
 
 module Schema : sig
@@ -43,7 +42,7 @@ val t_empty  : t
 val t_bool   : t
 val t_int    : t
 val t_var    : TVar.t -> t
-val t_arrow  : Effect.uvar -> t -> t -> t
+val t_arrow  : t -> t -> t
 val t_adt    : IMAstVar.t -> Level.t -> t list -> t
 val t_pair   : t -> t -> t
 
@@ -56,11 +55,7 @@ val foldl : (('a -> t -> 'a) -> 'a -> t -> 'a) -> 'a -> t -> 'a
 val set_uvar : uvar -> t -> unit
 val uvar_compare : uvar -> uvar -> int
 
-(* val merge : t -> t -> t *)
-(* val split : t -> t -> t *)
 val equal     : t -> t -> bool
-(* val subtype   : subtype:t -> supertype:t -> bool *)
-(* val supertype : supertype:t -> subtype:t -> bool *)
 
 exception Cannot_compare of t * t
 exception Levels_difference of IMAstVar.t * Level.t * Level.t
