@@ -1,11 +1,11 @@
 open Core
 open Typing
 
-let get_subst template instance =
+let get_subst (template : Type.t) (instance : Type.t) =
   let open Type in
   let rec inner mapping template instance =
     let open Effect in
-    match view template, view instance with
+    match Type.view template, Type.view instance with
     | TUVar _, _
     | _, TUVar _ ->
     failwith "Unification variable unrealized"
@@ -16,8 +16,7 @@ let get_subst template instance =
       | None -> TVarMap.add a instance mapping
       | Some _ -> failwith "internal error"
     end
-    | TArrow (eff1, targ1, tres1), TArrow (eff2, targ2, tres2)
-        when Effect.equal_mod_known !eff1 !eff2 ->
+    | TArrow (targ1, tres1), TArrow (targ2, tres2) ->
       let mapping = inner mapping targ1 targ2 in
       let mapping = inner mapping tres1 tres2 in
       mapping

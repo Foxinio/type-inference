@@ -20,9 +20,9 @@ let rec type_equal tp1 tp2 =
   | TVar x, TVar y -> TVar.compare x y = 0
   | TVar _, _ -> false
 
-  | TArrow(eff1, ta1, tb1), TArrow(eff2, ta2, tb2) 
-      when eff1 = eff2 ->
-    List.for_all2 type_equal ta1 ta2 && type_equal tb1 tb2
+  | TArrow(arr1, ta1, tb1), TArrow(arr2, ta2, tb2) 
+      when Arrow.equal_uvar arr1 arr2  ->
+    type_equal ta1 ta2 && type_equal tb1 tb2
   | TArrow _, _ -> false
 
   | TForallT(a1, tp1), TForallT(a2, tp2) ->
@@ -45,9 +45,9 @@ let rec type_equal tp1 tp2 =
 
 let rec subtype tp1 tp2 =
   match tp1, tp2 with
-  | TArrow(eff1, ta1, tb1), TArrow(eff2, ta2, tb2) 
-      when eff1 = eff2 ->
-    List.for_all2 subtype ta2 ta1 && subtype tb1 tb2
+  | TArrow(arr1, ta1, tb1), TArrow(arr2, ta2, tb2) 
+      when Arrow.subtype_uvar arr1 arr2 ->
+    subtype ta2 ta1 && subtype tb1 tb2
   | TArrow _, _ -> false
 
   | TForallT(a1, tp1), TForallT(a2, tp2) ->

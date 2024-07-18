@@ -1,12 +1,14 @@
+
+let transform_with_effects = FillEffects.transform_with_effects
+let transform_with_folding = FillFolding.transform_with_folding
+
 include Type
-
-let ensure_well_typed = EnsureWellTyped.ensure_well_typed
-
-let type_equal = Order.type_equal
+include Order
+include EnsureWellTyped
 
 module Subst = Subst
 module Env   = Env
 module PrettyPrinter = PrettyPrinter
 module Folding = Folding
-
+module Arrow = Arrow
 

@@ -1,12 +1,6 @@
-module Coerse = SystemF.Coerse
-module Folding = SystemF.Folding
-open Typing
+module Arrow = SystemF.Arrow
 open Core
-
-let extract_eff (e : Schema.typ Imast.expr) = 
-  match Schema.get_template e.typ |> Type.view with
-  | Type.TArrow(eff, _, _) -> Effect.get_val eff
-  | _ -> raise (Invalid_argument "cannot extract from non-arrow")
+open Typing
 
 let rec tr_type env (tp : Type.t) : SystemF.tp =
   let open Type in
@@ -18,16 +12,25 @@ let rec tr_type env (tp : Type.t) : SystemF.tp =
   | TBool -> SystemF.TBool
   | TInt  -> SystemF.TInt
   | TVar x -> SystemF.TVar (Env.lookup_tvar env x)
-  | TArrow(eff, tps, tp) ->
-    let fvar = Folding.fresh () in
-    SystemF.TArrow(eff, fvar, [tr_type env tps], tr_type env tp)
+  | TArrow(targ, tres) ->
+    let arvar = Arrow.fresh () in
+    SystemF.TArrow(arvar, tr_type env targ, tr_type env tres)
   | TPair(tp1, tp2) ->
     SystemF.TPair(tr_type env tp1, tr_type env tp2)
   | TADT(a, _, tps) ->
     SystemF.TADT(a, List.map (tr_type env) tps)
 
+let tr_typ env typ =
+  tr_type env @@ Schema.get_template typ
+
 let tr_var env (name,tp) =
-  name, tr_type env @@ Schema.get_template tp
+  name, tr_typ env tp
+
+let rec mark_impure env = function
+  | SystemF.TArrow(_, _, (TArrow (_,_,_) as tres)) -> mark_impure env tres
+  | SystemF.TArrow(arr, _, _) -> Arrow.set_impure arr
+  | tp -> Utils.report_internal_error "Expected TArrow: %s"
+    (SystemF.PrettyPrinter.pp_type (Env.get_ctx env) tp)
 
 let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
   match e.data with
@@ -41,25 +44,27 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
       |> List.map (fun (_, tp) -> tr_type env tp) in
     SystemF.ETApp (SystemF.EVar name, xs)
 
-  | Imast.EExtern (name, tp, arg1) ->
-    let tp' = tr_type env @@ Schema.get_template tp in
-    let arg1' = tr_type env @@ Schema.get_template arg1 in
+  | Imast.EExtern (name, eff, tp, arg1) ->
+    let tp' = tr_typ env tp in
+    let arg1' = tr_typ env arg1 in
+    mark_impure env tp';
     SystemF.EExtern (name, tp', arg1')
 
   | Imast.EFn(x, body) ->
-    let x' = tr_var env x in
-    SystemF.EFn([x'], tr_expr env body, extract_eff e)
+    let x', tp = tr_var env x in
+    let xs, body = fold_fn env body in
+    let tp = tr_typ env e.typ in
+    SystemF.EFn(x' :: xs, tr_expr env body, tp)
 
   | Imast.EFix(f, x, body) ->
-    let f, _ = tr_var env f in
-    let x' = tr_var env x in
-    let tpres = tr_type env @@ Schema.get_template body.typ in
-    SystemF.EFix(f, [x'], tpres, tr_expr env e, extract_eff e)
+    let f, tp = tr_var env f in
+    let x', _ = tr_var env x in
+    let xs, body = fold_fn env body in
+    SystemF.EFix(f, x' :: xs, tr_expr env body, tp)
 
   | Imast.EApp(e1, e2) ->
-    let e1 = tr_expr env e1 in
-    let e2 = tr_expr env e2 in
-    SystemF.EApp (e1, [e2])
+    let e2' = tr_expr env e2 in
+    SystemF.EApp (tr_expr env e1, [e2'])
 
   | Imast.ELet((x, tp), e1, e2) ->
     let env', tvars = Env.extend_tvar env
@@ -94,7 +99,7 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
   | Imast.ECtor (name, body) ->
     SystemF.ECtor (name, tr_expr env body)
 
-  | Imast.ETypeAlias (alias, typ, rest) ->
+  | Imast.ETypeAlias (_, _, rest) ->
     (* at this point this expr doesn't do anything *)
     tr_expr env rest
 
@@ -104,88 +109,15 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
     let clauses' = List.map f clauses in
     SystemF.EMatch(tr_expr env sub_expr, clauses', tp)
 
-  and add_coersion env (e1 : Schema.typ Imast.expr) tp =
-    let coerse = build_coersion env (Schema.get_template e1.typ) tp in
-    match Coerse.is_id coerse with
-    | true -> tr_expr env e1
-    | false -> SystemF.ECoerse (coerse, tr_expr env e1)
-
-  and build_coersion env tp_from tp_to =
-      let opt_cons = function
-        | None, _  | _, None -> None
-        | Some lst, Some tp -> Some (tp :: lst) in
-      let fold_coers known =
-        let rec inner (acc1, acc2) tps1 tps2 =
-          match tps1, tps2 with
-          | tp1 :: tps1, tp2 :: tps2 ->
-            let c = build_coersion env tp1 tp2 in
-            inner (opt_cons (acc1, Coerse.unwrap_id c), c :: acc2) tps1 tps2
-          | [], [] ->
-            begin match acc1 with
-            | Some acc1 -> Either.Left (List.rev acc1)
-            | None -> Either.Right (List.rev acc2)
-            end
-          | _ -> failwith "internal error" in
-          let acc = if known then Some [] else None in
-          inner (acc, [])
-      in
-    match Type.view tp_from, Type.view tp_to with
-    | (Type.TGVar (_, _) | Type.TUVar _), _ ->
-      failwith "Unification variable unrealized"
-
-    | Type.TUnit, Type.TUnit
-    | Type.TBool, Type.TBool
-    | Type.TInt, Type.TInt -> SystemF.CId (tr_type env tp_to)
-
-    | Type.TVar x, Type.TVar y when TVar.compare x y = 0 ->
-      SystemF.CId (tr_type env tp_from)
-
-    | Type.TEmpty, _ ->
-      SystemF.CBot (tr_type env tp_from)
-
-    | Type.TADT (name_from, _, args_from),
-      Type.TADT (name_to, _, args_to)
-        when name_from = name_to ->
-      assert (List.for_all2 Type.equal args_from args_to);
-      SystemF.CId (tr_type env tp_to)
-
-    | Type.TArrow (eff_from, tps_from, tpres_from), Type.TArrow (eff_to, tps_to, tpres_to) ->
-      let len_from, len_to = List.length tps_from, List.length tps_to in
-      if len_from = len_to then
-        let coerse_res = build_coersion env tpres_from tpres_to in
-        match fold_coers (Coerse.is_id coerse_res) tps_to tps_from with
-        | Either.Left tps ->
-          SystemF.CId (SystemF.TArrow (tps, Coerse.unwrap_id coerse_res |> Option.get))
-        | Either.Right coers ->
-          SystemF.CPArrow (coers, coerse_res)
-      (* TODO: Reverse direction of inequation *)
-      (* ~this should be correct right now *)
-      else if len_from < len_to then
-        let tps_to, tps_to' = Utils.split_list tps_to len_from in
-        let coers = fold_coers false tps_to tps_from
-          |> Either.fold
-            ~left:(List.map (fun tp -> SystemF.CId tp))
-            ~right:Fun.id
-        in
-        SystemF.CSubArrow (coers,
-          build_coersion env tpres_from
-          (Type.t_arrow tps_to' tpres_to))
-      else
-        failwith "internal error"
-
-    | Type.TPair (tp1_from, tp2_from), Type.TPair (tp1_to, tp2_to) ->
-      let coers1 = build_coersion env tp1_from tp1_to in
-      let coers2 = build_coersion env tp2_from tp2_to in
-      begin match coers1, coers2 with
-        | SystemF.CId tp1, SystemF.CId tp2 ->
-          SystemF.CId (SystemF.TPair (tp1, tp2))
-        | _ ->
-          SystemF.CPair (coers1, coers2)
-      end
-
-    | (Type.TUnit | Type.TBool | Type.TInt | Type.TVar _| Type.TADT _ | Type.TArrow _ | Type.TPair _), _ ->
-      failwith "internal error"
-
+and fold_fn env body =
+  let rec inner (body : Schema.typ Imast.expr) =
+    match body.data with
+    | Imast.EFn (x, body) ->
+      let x', _ = tr_var env x in
+      let xs, body' = inner body in
+      x'::xs, body'
+    | _ -> [], body
+  in inner body
 
 let tr_program ((p,env) : program) : SystemF.program =
   tr_expr Env.empty p, env

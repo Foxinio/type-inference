@@ -12,15 +12,11 @@ val add_ctor : t -> var -> tp -> name -> tvar list -> t
 
 val extend_tvar : t -> tvar list -> t * tvar list
 val extend_ctors : t -> (var * tp) list -> name -> tvar list -> t
-val extend_var  : t -> (var * tp) list -> t
+val extend_var  : t -> var list -> tp -> tp * t * Core.Effect.t
 
 val lookup_var  : t -> var -> tp
 val lookup_tvar : t -> tvar -> tvar
 val lookup_ctor : t -> var -> tp * name * tvar list
 
 val tvar_set : t -> TVarSet.t
-
-val push_eff_stack : t -> t
-val pop_eff_stack : t -> Core.Effect.t
-val impure_top : t -> 'a
 

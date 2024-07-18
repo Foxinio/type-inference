@@ -1,26 +1,47 @@
 open Core
 open Imast
 
-
 module TVar : Var.VAR
-
-type adtvar = IMAstVar.t
-type tvar = TVar.t
-type var  = IMAstVar.t
-type name = IMAstVar.t
 
 module Folding : sig
   type t =
-    | Folded
-    | Unfolded
+    | FldFolded
+    | FldUnfolded
+end
+
+module Arrow : sig
   type uvar
 
-  val is_folded : uvar -> bool
-  val view      : uvar -> t
-  val compare   : uvar -> uvar -> int
-  val fresh     : unit -> uvar
-  val set_uvar  : uvar -> t -> unit
+  val fresh : unit -> uvar
+  val view_eff : uvar -> Effect.t
+  val view_fold : uvar -> Folding.t
+  val view : uvar -> Effect.t * Folding.t
+  val set_unfolded : uvar -> unit
+  val set_impure : uvar -> unit
+  val link_fold : uvar -> uvar -> unit
+  val link_eff : uvar -> uvar -> unit
+  val unify_uvar : uvar -> uvar -> unit
+  val is_impure : uvar -> bool
+  val is_unfolded : uvar -> bool
+
+  val subtype :
+    Effect.t * Folding.t ->
+    Effect.t * Folding.t ->
+    bool
+
+  val equal :
+    Effect.t * Folding.t ->
+    Effect.t * Folding.t ->
+    bool
+
+  val subtype_uvar : uvar -> uvar -> bool
+  val equal_uvar : uvar -> uvar -> bool
 end
+
+type adtvar = IMAstVar.t
+type tvar   = TVar.t
+type var    = IMAstVar.t
+type name   = IMAstVar.t
 
 type tp =
   | TUnit
@@ -28,29 +49,18 @@ type tp =
   | TBool
   | TInt
   | TVar     of tvar
-  | TArrow   of Effect.uvar * Folding.uvar * tp list * tp
+  | TArrow   of Arrow.uvar * tp * tp
   | TADT     of adtvar * tp list
   | TForallT of tvar list * tp
   | TPair    of tp * tp
-
-type coersion =
-  | CId       of tp
-  | CBot      of tp
-  | CPArrow    of Effect.t * coersion list * coersion
-  | CForallT  of tvar list * coersion
-  | CPair     of coersion * coersion
-  | CMrgArrow  of coersion list * coersion
-  | CSpltArrow of coersion list * coersion
-  | CImprArrow of coersion list * coersion
 
 type expr =
   | EUnit
   | EBool   of bool
   | ENum    of int
   | EVar    of var
-  | ECoerse of coersion * expr
-  | EFn     of (var * tp) list * expr * Effect.t
-  | EFix    of var * (var * tp) list * tp * expr * Effect.t
+  | EFn     of var list * expr * tp
+  | EFix    of var * var list * expr * tp
   | EApp    of expr * expr list
   (* Big lambda: Λα.τ *)
   | ETFn    of tvar list * expr
@@ -68,32 +78,51 @@ type expr =
   (* tp is type of `match expr with clauses` *)
   | EMatch  of expr * clause list * tp
 
-
 and ctor_def = name * tp
 and alias = name * tvar list
 and clause = name * var * expr
 
-type program = expr * string Imast.VarTbl.t
-
-val ensure_well_typed : program -> unit
-val type_equal : tp -> tp -> bool
-
 module TVarMap  : Map.S with type key = TVar.t
 module TVarSet  : Set.S with type elt = TVar.t
 
-module Coerse : sig
-  val is_id     : coersion -> bool
-  val unwrap_id : coersion -> tp option
-  val rebuild   : coersion -> tp * tp
+module Env : sig
+  type t
+
+  val empty : t
+
+  val add_var  : t -> var -> tp -> t
+  val add_tvar : t -> tvar -> t * tvar
+  val add_ctor : t -> var -> tp -> name -> tvar list -> t
+
+  val extend_tvar : t -> tvar list -> t * tvar list
+  val extend_ctors : t -> (var * tp) list -> name -> tvar list -> t
+  val extend_var  : t -> var list -> tp -> tp * t * Effect.t
+
+  val lookup_var  : t -> var -> tp
+  val lookup_tvar : t -> tvar -> tvar
+  val lookup_ctor : t -> var -> tp * name * tvar list
+
+  val tvar_set : t -> TVarSet.t
 end
 
+type program = expr * string Imast.VarTbl.t
+
+val infer_type : Env.t -> expr -> tp * Effect.t
+val ensure_well_typed : program -> unit
+val transform_with_effects : program -> program
+val transform_with_folding : program -> program
+
+val type_equal : tp -> tp -> bool
+val subtype    : tp -> tp -> bool
+val supertype  : tp -> tp -> bool
+
 module PrettyPrinter : sig
-  type ('a, 'c) ctx = ('a, 'c) PrettyPrinter.ctx
+  type ('a, 'c) ctx
 
   val pp_context : unit -> ('a, 'c) ctx
   val pp_context_of_seq : ('a * string) Seq.t -> ('c, 'a) ctx
 
-  val pp_type : (tvar, Imast.var_type) ctx -> tp -> string
-
+  val pp_type : (TVar.t, var) ctx -> tp -> string
   val string_of_type : tp -> string
 end
+

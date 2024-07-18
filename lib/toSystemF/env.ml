@@ -1,19 +1,25 @@
 open Core.Imast
-open SystemF
-
+open Typing
 
 
 type t = {
-  tvar_map : tvar Typing.TVarMap.t;
+  tvar_map : SystemF.tvar TVarMap.t;
+  name_map : string VarTbl.t;
 }
 
 let empty = {
-  tvar_map = Typing.TVarMap.empty;
+  tvar_map = TVarMap.empty;
+  name_map = VarTbl.create 11;
 }
 
-let add_tvar env a =
-  let b = TVar.fresh () in
-  { tvar_map = Typing.TVarMap.add a b env.tvar_map}, b
+let with_name_map name_map = {
+  tvar_map = TVarMap.empty;
+  name_map;
+}
+
+let add_tvar env (a : TVar.t) =
+  let b = SystemF.TVar.fresh () in
+  { env with tvar_map = TVarMap.add a b env.tvar_map}, b
 
 let extend_tvar env =
   let f (env, lst) x =
@@ -23,7 +29,10 @@ let extend_tvar env =
  List.fold_left f (env,[])
 
 let lookup_tvar env x =
-match Typing.TVarMap.find_opt x env.tvar_map with
-| None -> failwith "Internal error: unbound type variable"
-| Some x -> x
+  match TVarMap.find_opt x env.tvar_map with
+  | None -> failwith "Internal error: unbound type variable"
+  | Some x -> x
+
+let get_ctx env =
+  SystemF.PrettyPrinter.pp_context_of_seq (VarTbl.to_seq env.name_map)
 

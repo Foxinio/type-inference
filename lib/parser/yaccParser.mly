@@ -31,7 +31,7 @@ expl_type_list2
 ;
 
 expl_type
-: prod_type ARROW2 expl_type                 { TArrow (EffUnknown, $1, $3) }
+: prod_type ARROW2 expl_type                 { TArrow ($1, $3) }
 | prod_type                                  { $1                       }
 ;
 

@@ -37,8 +37,8 @@ let translate (p : Ast.program) : program =
       | Ast.EBool b -> EBool b
       | Ast.ENum  n -> ENum n
       | Ast.EVar (s,t) -> EVar (env_find node s gamma_env, conv_type delta_env t)
-      | Ast.EExtern (s,t,_) ->
-        EExtern (s, conv_type delta_env t, THole)
+      | Ast.EExtern (s, eff, t,_) ->
+        EExtern (s, eff, conv_type delta_env t, THole)
       | Ast.EFn ((x, xt), e) ->
         let (x', xt) = fresh_var (x, xt) in
         let gamma_env = StringMap.add x x' gamma_env in
@@ -127,8 +127,8 @@ let translate (p : Ast.program) : program =
           TAlias (v, ts)
         | Ast.TPair (tp1, tp2) ->
           TPair (conv_type delta_env tp1, conv_type delta_env tp2)
-        | Ast.TArrow (eff, targ, tres) ->
-          TArrow (eff, conv_type delta_env targ, conv_type delta_env tres)
+        | Ast.TArrow (targ, tres) ->
+          TArrow (conv_type delta_env targ, conv_type delta_env tres)
     in
     { node with
       data = conv_expr data;

@@ -45,7 +45,7 @@ let pp_context_lookup x ctx =
     | _, Some str -> str
     | NamedVar x, None ->
       (* this shouldn't happen, internal error *)
-      raise Not_found
+      Core.Utils.report_internal_error "Named variable not found by pretty printer"
     | AnonVar _, None ->
       let name = "'" ^ type_name_gen anons in
       ctx := { env=(x, name) :: env; anons=anons+1 };
@@ -63,15 +63,17 @@ let rec pp_type ctx lvl = function
   | TEmpty -> "Empty"
   | TBool  -> "Bool"
   | TInt   -> "Int"
-  | TArrow(EffPure, tps, tp2) ->
-    pp_at_level 0 lvl
-      (Printf.sprintf "%s -> %s" (pp_list "," ctx 1 tps) (pp_type ctx 0 tp2))
-  | TArrow(EffUnknown, tps, tp2) ->
-    pp_at_level 0 lvl
-      (Printf.sprintf "%s ->? %s" (pp_list "," ctx 1 tps) (pp_type ctx 0 tp2))
-  | TArrow(EffImpure, tps, tp2) ->
-    pp_at_level 0 lvl
-      (Printf.sprintf "%s ->[] %s" (pp_list "," ctx 1 tps) (pp_type ctx 0 tp2))
+  | TArrow(arr, targ, tres) ->
+      let arr_str =
+        let module Effect = Core.Effect in
+        match Arrow.view arr with
+        | EffPure, FldUnfolded -> "->"
+        | EffPure, FldFolded   -> ","
+        | EffImpure, FldUnfolded -> "->[]"
+        | EffImpure, FldFolded   -> ",'"
+      in
+      pp_at_level 0 lvl
+        (Printf.sprintf "%s %s %s" (pp_type ctx 0 targ) arr_str (pp_type ctx 0 tres))
   | TPair(tp1, tp2) ->
     pp_at_level 2 lvl
       (Printf.sprintf "%s * %s"

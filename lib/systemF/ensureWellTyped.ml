@@ -3,14 +3,26 @@ open Type
 open Subst
 open Order
 
+let assert_type_eq tp1 tp2 =
+  if Order.type_equal tp1 tp2 then () else
+  Utils.report_internal_error "At checking well-scoped type equality, failed"
+
+let assert_subtype tp1 tp2 =
+  if Order.subtype tp1 tp2 then () else
+  Utils.report_internal_error "At checking well-scoped type subtyping, failed"
+
+let assert_subeffect eff1 eff2 =
+  if Effect.compare eff1 eff2 <= 0 then () else
+  Utils.report_internal_error "At checking well-scoped effect subeffecting, failed"
+
 (** Checks if type is well-scoped, and refresh its type variables according to
     the environment *)
 let rec check_well_scoped env tp =
   match tp with
   | TUnit | TEmpty | TBool | TInt -> tp
   | TVar a -> TVar (Env.lookup_tvar env a)
-  | TArrow(eff, tps, tpres) ->
-    TArrow(eff, List.map (check_well_scoped env) tps, check_well_scoped env tpres)
+  | TArrow(arr, targ, tres) ->
+    TArrow(arr, check_well_scoped env targ, check_well_scoped env tres)
   | TForallT(a, tp) ->
     let (env, a) = Env.extend_tvar env a in
     TForallT(a, check_well_scoped env tp)
@@ -19,98 +31,74 @@ let rec check_well_scoped env tp =
   | TADT(a, tps) ->
     TADT(a, List.map (check_well_scoped env) tps)
 
-let split_arrow tps tpres =
-  let f tp acc = TArrow(EffPure, [tp], acc) in
-  List.fold_left f tpres tps
-
 let rec infer_type env e =
   match e with
-  | EUnit   -> TUnit
-  | EBool _ -> TBool
-  | ENum  _ -> TInt
-  | EVar  x -> Env.lookup_var env x
-
-  | EExtern (name, tp, _) ->
-    check_well_scoped env tp
-
-  | EFn(xs, body) ->
-    let f env' (x, tp) =
-      let tp = check_well_scoped env tp in
-      Env.add_var env' x tp, tp
-    in
-    let env, tp1 = List.fold_left_map f env xs in
-    let env = Env.push_eff_stack env in
-    let tp2 = infer_type env body in
-    TArrow(Env.pop_eff_stack env, tp1, tp2)
-
-  | EFix(f, lst, tpres, body) ->
-    let tpres = check_well_scoped env tpres in
-    let lst = List.map (fun (x,tp) -> x, check_well_scoped env tp) lst in
-    let tps = List.map snd lst in
-    let f_tp = TArrow(EffUnknown, tps, tpres) in
-    let env = Env.add_var env f f_tp in
-    let env = Env.extend_var env lst in
-    let env = Env.push_eff_stack env in
-    check_type env body tpres;
-    TArrow(Env.pop_eff_stack env, tps, tpres)
-
-  | EApp(e1, es) ->
-    begin match infer_type env e1 with
-    | TArrow(eff, tps, tp1) when List.length tps = List.length es ->
-      List.iter2 (check_type env) es tps;
-      if eff = EffImpure then Env.impure_top env;
-      tp1
-    | _ -> failwith "Internal type error"
-    end
+  | EUnit   -> TUnit, Effect.EffPure
+  | EBool _ -> TBool, EffPure
+  | ENum _  -> TInt, EffPure
+  | EVar x  -> Env.lookup_var env x, EffPure
+  | EFn (args, body, tp) ->
+    let tres, env, eff = Env.extend_var env args tp in
+    check_type_and_effect env body tres eff;
+    tp, EffPure
+  | EFix (f, args, body, tp) ->
+    let env = Env.add_var env f tp in
+    let tres, env, eff = Env.extend_var env args tp in
+    check_type_and_effect env body tres eff;
+    tp, EffPure
+  | EApp (e1, es) ->
+    let tp1, eff = infer_type env e1 in
+    let tres, eff = check_app_correctness env es tp1 eff in
+    tres, eff
 
   | ETFn(a, body) ->
     let env, b = Env.extend_tvar env a in
-    let tp = infer_type env body in
-    TForallT(b, tp)
+    let tp, eff = infer_type env body in
+    TForallT(b, tp), eff
 
   | ETApp(e, tps) ->
     begin match infer_type env e with
-    | TForallT(args, body) when List.length args = List.length tps ->
+    | TForallT(args, body), eff when List.length args = List.length tps ->
       let tps = List.map (check_well_scoped env) tps in
-      subst_list body args tps
+      subst_list body args tps, eff
     | _ -> failwith "Internal type error"
     end
 
   | ELet(x, e1, e2) ->
-    let tp1 = infer_type env e1 in
-    infer_type (Env.add_var env x tp1) e2
+    let tp1, eff1 = infer_type env e1 in
+    let tp2, eff2 = infer_type (Env.add_var env x tp1) e2 in
+    tp2, Effect.join eff1 eff2
+
+  | EExtern(_, tp, _) ->
+    check_well_scoped env tp, EffPure
 
   | EPair(e1, e2) ->
-    let tp1 = infer_type env e1 in
-    let tp2 = infer_type env e2 in
-    TPair(tp1, tp2)
+    let tp1, eff1 = infer_type env e1 in
+    let tp2, eff2 = infer_type env e2 in
+    TPair(tp1, tp2), Effect.join eff1 eff2
 
   | EFst e ->
     begin match infer_type env e with
-    | TPair (tp1, _) -> tp1
+    | TPair (tp1, _), eff -> tp1, eff
     | _ -> failwith "Internal type error"
     end
 
   | ESnd e ->
     begin match infer_type env e with
-    | TPair(_, tp2) -> tp2
+    | TPair(_, tp2), eff -> tp2, eff
     | _ -> failwith "Internal type error"
     end
 
   | EIf(e1, e2, e3) ->
-    check_type env e1 TBool;
-    let tp = infer_type env e2 in
-    check_type env e3 tp;
-    tp
+    let eff1 = check_type env e1 TBool in
+    let tp, eff2 = infer_type env e2 in
+    let eff3 = check_type env e3 tp in
+    tp, Effect.join eff1 (Effect.join eff2 eff3)
 
   | ESeq(e1, e2) ->
-    check_type env e1 TUnit;
-    infer_type env e2
-
-  | ECoerse(c, e) ->
-    let tp_from, tp_to = Coerse.rebuild c in
-    check_type env e (check_well_scoped env tp_from);
-    check_well_scoped env tp_to
+    let eff1 = check_type env e1 TUnit in
+    let tp, eff2 = infer_type env e2 in
+    tp, Effect.join eff1 eff2
 
   | EType(alias, tvars, ctor_defs, body) ->
     let env', tvars = Env.extend_tvar env tvars in
@@ -119,37 +107,98 @@ let rec infer_type env e =
 
   | ECtor (name, body) ->
     let expected, alias, tvars = Env.lookup_ctor env name in
-    let tp = infer_type env body in
+    let tp, eff = infer_type env body in
     let adt_args = Subst.get_subst (Env.tvar_set env) expected tp |> List.map snd in
-    TADT (alias, adt_args)
+    TADT (alias, adt_args), eff
 
   | EMatch(body, defs, tp) ->
     let res_tp = check_well_scoped env tp in
     begin match infer_type env body with
-    | TADT(alias, args) ->
-      let f (ctor, x, e) =
+    | TADT(alias, args), eff1 ->
+      let f eff (ctor, x, e) =
         let expected, alias', tvars = Env.lookup_ctor env ctor in
         assert (Imast.IMAstVar.compare alias alias' = 0);
         let substituted = Subst.subst_list expected tvars args in
         let env = Env.add_var env x substituted in
-        check_type env e res_tp in
-      List.iter f defs;
-      res_tp
-    | TEmpty ->
+        check_type env e res_tp
+      in
+      res_tp, List.fold_left f eff1 defs
+    | TEmpty, eff1 ->
       assert(List.length defs = 0);
-      res_tp
+      res_tp, eff1
     | _ -> failwith "internal error"
     end
 
 
 
 and check_type env e tp =
-  let tp' = infer_type env e in
-  if type_equal tp' tp then ()
-  else failwith "Internal type error"
+  let tp', eff' = infer_type env e in
+  assert_subtype tp' tp;
+  eff'
+
+and check_type_and_effect env e tp eff =
+  let tp', eff' = infer_type env e in
+  assert_subtype tp' tp;
+  assert_subeffect eff' eff
+
+
+(*
+ * EApp(e1, es) has to match specyfic rules:
+ *   For es = ep₁ @ (Option.to_list ei) @ ep₂
+ *   and typeof(e1) = tp₁ ->ₚ ... ->ₚ tpₖ ->ᵢtpₖ₊₁ ->_ ... ->_ tpₙ ->_ ...
+ *                    \____|ep₁|____/        \_____|ep₂|_____/
+ *
+ *  These condition must be met:
+ *  1) effectof(EApp(e1, ep₁) = EffPure
+ *     (ignoring effects of evaluating elements of ep₁)
+ *  2) effectof(EApp(e1, ep₁ @ [ei]) = EffImpure
+ *     (ignoring effect of evaluating of ei)
+ *  3) ∀k+1 ≤ j ≤ n, effectof(es[j]) = EffPure
+ *     (not ignoring effects of evaluating elements of ep₁)
+ *
+ * In that way transformation will not affect the order of observable effects.
+ *)
+and check_app_correctness env args tp eff1 =
+
+  (* inner1 will check (1) condition *)
+  let rec inner1 args tp eff =
+    match args, tp with
+    | [], tres -> tres, eff
+    | _, TArrow(arr, _, _) when Arrow.view_eff arr = EffImpure ->
+      inner2 args tp eff
+    | e :: args, TArrow(arr, targ, tres) ->
+      let targ', eff' = infer_type env e in
+      assert_subtype targ' targ;
+      inner1 args tres (Effect.join eff eff')
+    | _ :: _, _ -> Utils.report_internal_error "Application with too many arguments"
+
+  (* inner2 will check (2) condition *)
+  and inner2 args tp eff =
+    match args, tp with
+    | e :: args, TArrow(arr, targ, tres) ->
+      let targ', eff' = infer_type env e in
+      assert_subtype targ' targ;
+      inner3 args tres (Effect.join eff eff')
+    | [], _ -> Utils.report_internal_error "Application with too few arguments"
+    | _ :: _, _ -> Utils.report_internal_error "Application with too many arguments"
+
+  (* inner3 will check (3) condition *)
+  and inner3 args tp eff =
+    match args, tp with
+    | e :: args, TArrow(arr, targ, tres) ->
+      let targ', eff' = infer_type env e in
+      if eff' = EffImpure then
+        Utils.report_internal_error "Application with impure effect. (3) condition broken.";
+      assert_subtype targ' targ;
+      inner3 args tres (Effect.join eff @@ Arrow.view_eff arr)
+    | [], tres -> tres, eff
+    | _ :: _, _ -> Utils.report_internal_error "Application with too many arguments"
+
+
+  in inner1 args tp eff1
 
 let ensure_well_typed (p, _) =
-  let _ : tp = infer_type Env.empty p in
+  let _, _ = infer_type Env.empty p in
   ()
 
 

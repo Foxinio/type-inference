@@ -2,9 +2,9 @@ open Core
 open Ast
 
 type 'typ def =
-| DLet of 'typ var * 'typ expr
-| DType of alias * (ctor_name * 'typ) list
-| DTypeAlias of alias * 'typ
+  | DLet of 'typ var * 'typ expr
+  | DType of alias * (ctor_name * 'typ) list
+  | DTypeAlias of alias * 'typ
 
 let make data =
   { data      = data;
@@ -28,7 +28,7 @@ let extract args typ =
   in
   let extracted_typ = List.map extract_typ args in
   List.map extract_ids args,
-  if !found then t_arrow EffUnknown extracted_typ typ else THole
+  if !found then t_arrow extracted_typ typ else THole
 
 let fold_fn args body typ =
   let aux arg body =

@@ -4,17 +4,15 @@ open Type
 open Core
 
 type t =
-  { var_map   : tp VarMap.t;
-    tvar_map  : tvar TVarMap.t;
-    ctor_map  : (tp*name*tvar list) VarMap.t;
-    eff_stack : Effect.uvar list;
+  { var_map  : tp VarMap.t;
+    tvar_map : tvar TVarMap.t;
+    ctor_map : (tp*name*tvar list) VarMap.t;
   }
 
 let empty =
-  { var_map   = VarMap.empty;
-    tvar_map  = TVarMap.empty;
-    ctor_map  = VarMap.empty;
-    eff_stack = [];
+  { var_map  = VarMap.empty;
+    tvar_map = TVarMap.empty;
+    ctor_map = VarMap.empty;
   }
 
 let add_var env x tp =
@@ -28,9 +26,16 @@ let add_ctor env ctor_name expected adt_name adt_args =
   { env with ctor_map = VarMap.add ctor_name (expected, adt_name, adt_args) env.ctor_map }
 
 
-let extend_var env lst =
-  let f env (name,tp) = add_var env name tp in
-  List.fold_left f env lst
+let extend_var env xs tp =
+  let rec inner env xs tp eff =
+    match xs, tp with
+    | x :: xs, TArrow(arr, tp1, tp2) ->
+      inner (add_var env x tp1) xs tp2 (Arrow.view_eff arr)
+    | _ :: _, _ ->
+      failwith "internal error: expected TArrow"
+    | [], tp ->
+      tp, env, eff
+  in inner env xs tp EffPure
 
 let extend_tvar env lst =
   let f (env,lst) x =
@@ -59,12 +64,7 @@ let lookup_ctor env x =
   | None -> failwith "Internal error: unbound constructor"
   | Some tp -> tp
 
-let push_eff_stack env =
-  { env with eff_stack = Effect.fresh_uvar () :: env.eff_stack }
-
-let pop_eff_stack env = List.hd env.eff_stack
-
-let impure_top env = List.hd env.eff_stack |> Effect.get_val
-
 let tvar_set env =
-  TVarMap.to_seq env.tvar_map |> Seq.map fst |> TVarSet.of_seq
+  TVarMap.to_seq env.tvar_map
+    |> Seq.map fst
+    |> TVarSet.of_seq

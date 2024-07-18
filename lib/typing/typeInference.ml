@@ -34,7 +34,7 @@ and convert_type node env explicit_type : Type.t =
   | Imast.THole -> Env.fresh_uvar env
   | Imast.TBool -> Type.t_bool
   | Imast.TInt  -> Type.t_int
-  | Imast.TArrow(eff, tp1, tp2) ->
+  | Imast.TArrow(tp1, tp2) ->
     let tp1 = convert_type node env tp1 in
     let tp2 = convert_type node env tp2 in
     Type.t_arrow tp1 tp2
@@ -86,13 +86,13 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
   | EBool b -> EBool b, Type.t_bool
   | ENum  n -> ENum  n, Type.t_int
 
-  | EExtern (name, typ, _) ->
+  | EExtern (name, eff, typ, _) ->
     let expl = convert_type e env typ in
     let arg = Env.fresh_uvar env in
     let res = Env.fresh_uvar env in
     let tp = Type.t_arrow arg res in
     Unify.equal expl tp;
-    EExtern (name, Schema.typ_mono expl, Schema.typ_mono arg),
+    EExtern (name, eff, Schema.typ_mono expl, Schema.typ_mono arg),
     expl
 
   | EVar  (name,typ) ->
