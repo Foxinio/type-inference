@@ -59,7 +59,6 @@ let pp_context_lookup x ctx =
 
 let rec pp_type ctx lvl tp =
   let rec matcher lvl = function
-    (* TODO: ensure no named var can hide under tvar *)
     | TVar x -> pp_context_lookup (AnonVar x) ctx
     | TADT (x, _, tps) -> 
       let x = pp_context_lookup (NamedVar x) ctx in

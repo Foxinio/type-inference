@@ -24,8 +24,8 @@ let rec check_well_scoped env tp =
   | TArrow(arr, targ, tres) ->
     TArrow(arr, check_well_scoped env targ, check_well_scoped env tres)
   | TForallT(a, tp) ->
-    let (env, a) = Env.extend_tvar env a in
-    TForallT(a, check_well_scoped env tp)
+    let env, b = Env.extend_tvar env a in
+    TForallT(b, check_well_scoped env tp)
   | TPair(tp1, tp2) ->
     TPair(check_well_scoped env tp1, check_well_scoped env tp2)
   | TADT(a, tps) ->
@@ -37,15 +37,20 @@ let rec infer_type env e =
   | EBool _ -> TBool, EffPure
   | ENum _  -> TInt, EffPure
   | EVar x  -> Env.lookup_var env x, EffPure
+
   | EFn (args, body, tp) ->
-    let tres, env, eff = Env.extend_var env args tp in
+    let tp' = check_well_scoped env tp in
+    let tres, env, eff = Env.extend_var env args tp' in
     check_type_and_effect env body tres eff;
-    tp, EffPure
+    tp', EffPure
+
   | EFix (f, args, body, tp) ->
-    let env = Env.add_var env f tp in
-    let tres, env, eff = Env.extend_var env args tp in
+    let tp' = check_well_scoped env tp in
+    let env = Env.add_var env f tp' in
+    let tres, env, eff = Env.extend_var env args tp' in
     check_type_and_effect env body tres eff;
-    tp, EffPure
+    tp', EffPure
+
   | EApp (e1, es) ->
     let tp1, eff = infer_type env e1 in
     let tres, eff = check_app_correctness env es tp1 eff in
@@ -101,7 +106,7 @@ let rec infer_type env e =
     tp, Effect.join eff1 eff2
 
   | EType(alias, tvars, ctor_defs, body) ->
-    let env', tvars = Env.extend_tvar env tvars in
+    let env, tvars = Env.extend_tvar env tvars in
     let env = Env.extend_ctors env ctor_defs alias tvars in
     infer_type env body
 
@@ -114,19 +119,20 @@ let rec infer_type env e =
   | EMatch(body, defs, tp) ->
     let res_tp = check_well_scoped env tp in
     begin match infer_type env body with
-    | TADT(alias, args), eff1 ->
-      let f eff (ctor, x, e) =
+    | TADT(alias, args), _ ->
+      let f (ctor, x, e) =
         let expected, alias', tvars = Env.lookup_ctor env ctor in
         assert (Imast.IMAstVar.compare alias alias' = 0);
         let substituted = Subst.subst_list expected tvars args in
         let env = Env.add_var env x substituted in
-        check_type env e res_tp
+        let _ = check_type env e res_tp in ()
       in
-      res_tp, List.fold_left f eff1 defs
+      List.iter f defs;
+      res_tp, EffImpure
     | TEmpty, eff1 ->
       assert(List.length defs = 0);
       res_tp, eff1
-    | _ -> failwith "internal error"
+    | _ -> failwith "internal type error"
     end
 
 
@@ -150,9 +156,9 @@ and check_type_and_effect env e tp eff =
  *
  *  These condition must be met:
  *  1) effectof(EApp(e1, ep₁) = EffPure
- *     (ignoring effects of evaluating elements of ep₁)
+ *     (ignoring effects of evaluating elements of ep₁ and e1)
  *  2) effectof(EApp(e1, ep₁ @ [ei]) = EffImpure
- *     (ignoring effect of evaluating of ei)
+ *     (ignoring effect of evaluating of ei and e1)
  *  3) ∀k+1 ≤ j ≤ n, effectof(es[j]) = EffPure
  *     (not ignoring effects of evaluating elements of ep₁)
  *

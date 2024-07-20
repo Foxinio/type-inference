@@ -14,12 +14,19 @@ let unwrap node env var opt =
     let name = Env.lookup_var_name env var in
     Utils.report_error node "Undefined variable: %s" name
 
-
 let make_mono tp eff =
   Schema.typ_mono tp, eff
 
 let get_tp ({typ;_} : Schema.typ expr) =
   Schema.get_template typ
+
+let is_value (e : 'a expr) =
+  match e.data with
+  | EUnit | EBool _ | ENum _ | EVar _ | EExtern _
+  | EFn _ | EFix _ | EPair _ | ECtor _ -> true
+  | EApp (_, _) | ELet (_, _, _) | EFst _ | ESnd _ | EIf (_, _, _)
+  | ESeq (_, _) | ETypeAlias (_, _, _) | EType (_, _, _) | EMatch (_, _) ->
+    false
 
 (** inference function *)
 let rec infer env (node : Imast.expl_type Imast.expr) =
@@ -131,8 +138,10 @@ and infer_type env (e : Imast.expl_type Imast.expr) =
     let env' = Env.increase_level_major env in
     let tp = convert_type e env' tp in
     let e1' = infer_and_check_type env' e1 tp in
-    (* TODO: Add value restriction *)
-    let x = x, Env.generalize env' (get_tp e1') in
+    (* ASK : is this done correctly *)
+    let x = if is_value e1'
+      then x, Env.generalize env' (get_tp e1')
+      else x, Schema.typ_mono (get_tp e1') in
     let e2' = infer (Env.extend_gamma env x) e2 in
     ELet(x, e1', e2'), get_tp e2'
 

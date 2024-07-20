@@ -1,10 +1,12 @@
 (** Typing environments *)
 
+open Core.Imast
 open Type
 
 type t
 
 val empty : t
+val with_name_map : string VarTbl.t -> t
 
 val add_var  : t -> var -> tp -> t
 val add_tvar : t -> tvar -> t * tvar
@@ -20,3 +22,4 @@ val lookup_ctor : t -> var -> tp * name * tvar list
 
 val tvar_set : t -> TVarSet.t
 
+val get_ctx : t -> ('a, var_type) PrettyPrinter.ctx

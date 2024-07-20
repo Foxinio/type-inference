@@ -18,8 +18,6 @@ module Arrow : sig
   val view : uvar -> Effect.t * Folding.t
   val set_unfolded : uvar -> unit
   val set_impure : uvar -> unit
-  val link_fold : uvar -> uvar -> unit
-  val link_eff : uvar -> uvar -> unit
   val unify_uvar : uvar -> uvar -> unit
   val is_impure : uvar -> bool
   val is_unfolded : uvar -> bool

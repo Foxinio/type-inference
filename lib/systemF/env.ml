@@ -1,18 +1,28 @@
 (** Typing environments *)
 
-open Type
 open Core
+open Imast
+open Type
 
 type t =
   { var_map  : tp VarMap.t;
     tvar_map : tvar TVarMap.t;
     ctor_map : (tp*name*tvar list) VarMap.t;
+    name_map : string VarTbl.t;
   }
 
 let empty =
   { var_map  = VarMap.empty;
     tvar_map = TVarMap.empty;
     ctor_map = VarMap.empty;
+    name_map = VarTbl.create 11;
+  }
+
+let with_name_map name_map =
+  { var_map  = VarMap.empty;
+    tvar_map = TVarMap.empty;
+    ctor_map = VarMap.empty;
+    name_map;
   }
 
 let add_var env x tp =
@@ -68,3 +78,7 @@ let tvar_set env =
   TVarMap.to_seq env.tvar_map
     |> Seq.map fst
     |> TVarSet.of_seq
+
+let get_ctx env =
+  PrettyPrinter.pp_context_of_seq (VarTbl.to_seq env.name_map)
+

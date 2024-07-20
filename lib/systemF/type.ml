@@ -60,9 +60,9 @@ module TVarSet = Set.Make(TVar)
 
 let impure_arr = function
   | TArrow (arr, _, _)  -> Arrow.set_impure arr
-  | _ -> assert false
+  | _ -> ()
 
 let split_arr = function
   | TArrow (arr, _, _) -> Arrow.set_unfolded arr
-  | _ -> assert false
+  | _ -> ()
 

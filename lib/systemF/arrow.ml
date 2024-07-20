@@ -8,12 +8,17 @@ and eff_uvar_state =
   | Impure
 
   (* holds list of uvars determined to be greater or equal to this.
-   * meaning if this uvar is determined to be impure, 
+   * meaning if this uvar is determined to be impure,
    * every uvar on the list shoud be too
    *)
   | EUnknown of uvar list
 and fold_uvar_state =
   | Unfolded
+
+  (* Same as above, but instead holds list of lesser uvars,
+   * and so once determined to be unfolded,
+   * will determin every uvar on the list
+   *)
   | FUnknown of uvar list
 
 let fresh () : uvar = ref (EUnknown [], FUnknown [])
@@ -30,11 +35,26 @@ let view_fold (x : uvar) =
 
 let view x = view_eff x, view_fold x
 
-let set_unfolded (x : uvar) =
-  x := fst !x, Unfolded
+(* ASK if this is what was expected *)
+let rec set_unfolded (x : uvar) =
+  match !x with
+  | Impure, FUnknown lst ->
+    x := fst !x, Unfolded;
+    List.iter set_unfolded lst
 
-let set_impure (x : uvar) =
-  x := Impure, snd !x
+  (* in this case if uvar is determined to be pure,
+     unfolding information isn't propagated,
+     lets see how it does *)
+  | EUnknown _, FUnknown _ ->
+    x := fst !x, Unfolded
+  | _, Unfolded -> ()
+
+let rec set_impure (x : uvar) =
+  match fst !x with
+  | EUnknown lst ->
+    x := Impure, snd !x;
+    List.iter set_impure lst
+  | Impure -> ()
 
 let link_fold (x : uvar) y =
   match !x with
@@ -48,17 +68,23 @@ let link_eff (x : uvar) y =
     x := EUnknown (y :: lst), fold
   | _ -> failwith "internal error"
 
-let unify_uvar (x : uvar) y =
-  (match fst !x with
+let unify_effect (x : uvar) y =
+  match fst !x with
   | EUnknown lst ->
     link_eff x y
   | Impure ->
-    set_impure y);
+    set_impure y
+
+let unify_fold (x : uvar) y =
   match snd !y with
   | FUnknown lst ->
     link_fold y x
   | Unfolded ->
     set_unfolded x
+
+let unify_uvar x y =
+  unify_effect x y;
+  unify_fold x y
 
 let is_impure x = view_eff x = EffImpure
 let is_unfolded x = view_fold x = FldUnfolded
@@ -82,10 +108,3 @@ let subtype_uvar x y =
 let equal_uvar x y =
   equal (view x) (view y)
 
-(* let rec compare x y = *)
-(*   match view x, view y with *)
-(*   | x, y when x = y -> 0 *)
-(*   | (EffPure, _), (EffPure, _) -> 0 *)
-(*   | (EffPure, _), (EffImpure, _) -> -1 *)
-(*   | (EffImpure, FldUnfolded), (EffImpure, FldFolded) -> -1 *)
-(*   | _ -> - compare y x *)
