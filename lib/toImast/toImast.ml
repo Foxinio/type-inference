@@ -37,8 +37,8 @@ let translate (p : Ast.program) : program =
       | Ast.EBool b -> EBool b
       | Ast.ENum  n -> ENum n
       | Ast.EVar (s,t) -> EVar (env_find node s gamma_env, conv_type delta_env t)
-      | Ast.EExtern (s, eff, t,_) ->
-        EExtern (s, eff, conv_type delta_env t, THole)
+      | Ast.EExtern (s, eff, t) ->
+        EExtern (s, eff, conv_type delta_env t)
       | Ast.EFn ((x, xt), e) ->
         let (x', xt) = fresh_var (x, xt) in
         let gamma_env = StringMap.add x x' gamma_env in

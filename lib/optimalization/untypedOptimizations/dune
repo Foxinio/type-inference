@@ -1,3 +1,0 @@
-(library
-  (name untypedOpt)
-  (libraries erase))

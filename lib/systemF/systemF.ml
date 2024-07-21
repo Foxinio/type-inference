@@ -2,7 +2,7 @@
 let transform_with_effects = FillEffects.transform_with_effects
 let transform_with_folding = FillFolding.transform_with_folding
 
-include Type
+include Main
 include Order
 include EnsureWellTyped
 

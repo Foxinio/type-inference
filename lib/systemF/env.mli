@@ -1,7 +1,7 @@
 (** Typing environments *)
 
 open Core.Imast
-open Type
+open Main
 
 type t
 

@@ -1,6 +1,6 @@
 (** Type equality *)
 
-open Type
+open Main
 open Subst
 
 let rec type_equal tp1 tp2 =

@@ -1,3 +1,3 @@
 (library
  (name systemF)
- (libraries core typing))
+ (libraries core))

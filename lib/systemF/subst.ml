@@ -1,6 +1,6 @@
 (** Type substitution *)
 
-open Type
+open Main
 
 let rec subst tsub tp =
   match tp with
@@ -37,7 +37,6 @@ let subst_mapping tp xs =
 
 
 let get_subst env_bound_tvars template instance =
-  let open Type in
   let rec inner bounded mapping template instance =
     match template, instance with
     | TUnit, TUnit | TBool, TBool | TInt, TInt | TEmpty, TEmpty -> mapping

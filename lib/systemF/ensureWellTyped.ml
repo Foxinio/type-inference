@@ -1,5 +1,5 @@
 open Core
-open Type
+open Main
 open Subst
 open Order
 
@@ -74,7 +74,7 @@ let rec infer_type env e =
     let tp2, eff2 = infer_type (Env.add_var env x tp1) e2 in
     tp2, Effect.join eff1 eff2
 
-  | EExtern(_, tp, _) ->
+  | EExtern(_, tp) ->
     check_well_scoped env tp, EffPure
 
   | EPair(e1, e2) ->

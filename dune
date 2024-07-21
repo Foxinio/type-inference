@@ -1,6 +1,6 @@
 (env
     (dev
-        (flags (:standard -g -w +39-33+26-27-32-21-69 -warn-error -A))
+        (flags (:standard -g -w -21+26-27-33+39-32-50-69 -warn-error -A))
     )
     (release
         (flags (:standard -w -39-33-26-27))

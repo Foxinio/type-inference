@@ -44,11 +44,10 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
       |> List.map (fun (_, tp) -> tr_type env tp) in
     SystemF.ETApp (SystemF.EVar name, xs)
 
-  | Imast.EExtern (name, eff, tp, arg1) ->
+  | Imast.EExtern (name, eff, tp) ->
     let tp' = tr_typ env tp in
-    let arg1' = tr_typ env arg1 in
-    mark_impure env tp';
-    SystemF.EExtern (name, tp', arg1')
+    if eff = Core.Effect.EffImpure then mark_impure env tp';
+    SystemF.EExtern (name, tp')
 
   | Imast.EFn(x, body) ->
     let x', tp = tr_var env x in

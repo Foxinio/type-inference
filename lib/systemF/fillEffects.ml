@@ -1,5 +1,5 @@
 open Core
-open Type
+open Main
 open Subst
 
 let refresh_tvars = EnsureWellTyped.check_well_scoped
@@ -101,7 +101,7 @@ let rec fill_effects env e =
     let tp2, eff2 = fill_effects env e2 in
     tp2, Effect.join eff1 eff2
 
-  | EExtern(_, tp, _) ->
+  | EExtern(_, tp) ->
     refresh_tvars env tp, EffPure
 
   | EPair(e1, e2) ->
@@ -229,9 +229,9 @@ let rec transform_expr env e : expr * tp * Effect.t =
     let es' = List.map f es in
     transform_app env e1' es'
 
-  | EExtern (name, tp, arg) ->
+  | EExtern (name, tp) ->
     let tp' = refresh_tvars env tp in
-    EExtern (name, tp', arg) ,tp', EffPure
+    EExtern (name, tp') ,tp', EffPure
 
   | ETFn (a, body) ->
     let env, b = Env.extend_tvar env a in

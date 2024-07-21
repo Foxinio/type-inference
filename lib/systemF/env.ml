@@ -2,7 +2,7 @@
 
 open Core
 open Imast
-open Type
+open Main
 
 type t =
   { var_map  : tp VarMap.t;
@@ -10,6 +10,8 @@ type t =
     ctor_map : (tp*name*tvar list) VarMap.t;
     name_map : string VarTbl.t;
   }
+
+(* ------------------------------------------------------------------------- *)
 
 let empty =
   { var_map  = VarMap.empty;
@@ -25,6 +27,8 @@ let with_name_map name_map =
     name_map;
   }
 
+(* ------------------------------------------------------------------------- *)
+
 let add_var env x tp =
   { env with var_map = VarMap.add x tp env.var_map }
 
@@ -35,6 +39,7 @@ let add_tvar env a =
 let add_ctor env ctor_name expected adt_name adt_args =
   { env with ctor_map = VarMap.add ctor_name (expected, adt_name, adt_args) env.ctor_map }
 
+(* ------------------------------------------------------------------------- *)
 
 let extend_var env xs tp =
   let rec inner env xs tp eff =
@@ -58,6 +63,7 @@ let extend_ctors env lst name tvars =
   let f env (name,tp) = add_ctor env name tp name tvars in
   List.fold_left f env lst
 
+(* ------------------------------------------------------------------------- *)
 
 let lookup_var env x =
   match VarMap.find_opt x env.var_map with
@@ -78,6 +84,8 @@ let tvar_set env =
   TVarMap.to_seq env.tvar_map
     |> Seq.map fst
     |> TVarSet.of_seq
+
+(* ------------------------------------------------------------------------- *)
 
 let get_ctx env =
   PrettyPrinter.pp_context_of_seq (VarTbl.to_seq env.name_map)

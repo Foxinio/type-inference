@@ -1,5 +1,5 @@
 open Core
-open Type
+open Main
 open Subst
 
 let refresh_tvars = EnsureWellTyped.check_well_scoped
@@ -66,7 +66,7 @@ let rec fill_unfolds env e =
     let tp2 = fill_unfolds env e2 in
     tp2
 
-  | EExtern(_, tp, _) ->
+  | EExtern(_, tp) ->
     refresh_tvars env tp
 
   | EPair(e1, e2) ->
@@ -188,9 +188,9 @@ let rec transform_expr env e : expr * tp =
     let e1', tp = transform_expr env e1 in
     transform_app env e1' es tp
 
-  | EExtern (name, tp, arg) ->
+  | EExtern (name, tp) ->
     let tp' = refresh_tvars env tp in
-    EExtern (name, tp', arg) ,tp'
+    EExtern (name, tp') ,tp'
 
   | ETFn (a, body) ->
     let env, b = Env.extend_tvar env a in
@@ -206,7 +206,7 @@ let rec transform_expr env e : expr * tp =
     | _ -> failwith "Internal type error"
     end
 
-  | ELet (x, e1, e2) ->
+    | ELet (x, e1, e2) ->
     let e1', tp1 = transform_expr env e1 in
     let env = Env.add_var env x tp1 in
     let e2', tp2 = transform_expr env e2 in
