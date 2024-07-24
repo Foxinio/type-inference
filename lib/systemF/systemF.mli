@@ -114,6 +114,8 @@ val type_equal : tp -> tp -> bool
 val subtype    : tp -> tp -> bool
 val supertype  : tp -> tp -> bool
 
+val pp_program : program -> string
+
 module PrettyPrinter : sig
   type ('a, 'c) ctx
 
@@ -122,5 +124,7 @@ module PrettyPrinter : sig
 
   val pp_type : (TVar.t, var) ctx -> tp -> string
   val string_of_type : tp -> string
+
+  val pp_expr : (TVar.t, var) ctx -> expr -> string
 end
 

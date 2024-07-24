@@ -90,3 +90,9 @@ let tvar_set env =
 let get_ctx env =
   PrettyPrinter.pp_context_of_seq (VarTbl.to_seq env.name_map)
 
+let fresh_var {name_map;_} =
+  let x = Core.Imast.IMAstVar.fresh () in
+  let name = VarTbl.gen_name () in
+  VarTbl.add name_map x name;
+  x
+

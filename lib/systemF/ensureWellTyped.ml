@@ -3,6 +3,7 @@ open Main
 open Subst
 open Order
 
+(* TODO check type eq instead of subtyping in whole program *)
 let assert_type_eq tp1 tp2 =
   if Order.type_equal tp1 tp2 then () else
   Utils.report_internal_error "At checking well-scoped type equality, failed"
@@ -171,7 +172,7 @@ and check_app_correctness env args tp eff1 =
     match args, tp with
     | [], tres -> tres, eff
     | _, TArrow(arr, _, _) when Arrow.view_eff arr = EffImpure ->
-      inner2 args tp eff
+      inner2 args tp
     | e :: args, TArrow(arr, targ, tres) ->
       let targ', eff' = infer_type env e in
       assert_subtype targ' targ;
@@ -179,32 +180,36 @@ and check_app_correctness env args tp eff1 =
     | _ :: _, _ -> Utils.report_internal_error "Application with too many arguments"
 
   (* inner2 will check (2) condition *)
-  and inner2 args tp eff =
+  and inner2 args tp =
+    (* because inner2 is only called in inner1
+       once application is determined to be impure
+       there is no need to pass effect along *)
     match args, tp with
     | e :: args, TArrow(arr, targ, tres) ->
-      let targ', eff' = infer_type env e in
+      let targ', _ = infer_type env e in
       assert_subtype targ' targ;
-      inner3 args tres (Effect.join eff eff')
+      inner3 args tres
     | [], _ -> Utils.report_internal_error "Application with too few arguments"
     | _ :: _, _ -> Utils.report_internal_error "Application with too many arguments"
 
   (* inner3 will check (3) condition *)
-  and inner3 args tp eff =
+  and inner3 args tp =
+    (* because inner3 is only called in inner2 effect is known *)
     match args, tp with
-    | e :: args, TArrow(arr, targ, tres) ->
+    | e :: args, TArrow(_, targ, tres) ->
       let targ', eff' = infer_type env e in
       if eff' = EffImpure then
         Utils.report_internal_error "Application with impure effect. (3) condition broken.";
       assert_subtype targ' targ;
-      inner3 args tres (Effect.join eff @@ Arrow.view_eff arr)
-    | [], tres -> tres, eff
+      inner3 args tres
+    | [], tres -> tres, Effect.EffImpure
     | _ :: _, _ -> Utils.report_internal_error "Application with too many arguments"
 
 
   in inner1 args tp eff1
 
-let ensure_well_typed (p, _) =
-  let _, _ = infer_type Env.empty p in
+let ensure_well_typed (p, map) =
+  let _, _ = infer_type (Env.with_name_map map) p in
   ()
 
 

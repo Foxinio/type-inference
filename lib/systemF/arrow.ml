@@ -75,13 +75,16 @@ let unify_effect (x : uvar) y =
   | Impure ->
     set_impure y
 
-let unify_fold (x : uvar) y =
+let unify_fold x y =
   match snd !y with
   | FUnknown lst ->
     link_fold y x
   | Unfolded ->
     set_unfolded x
 
+(** Calling `unify_uvar x y`, means that somewhere
+     x <: y was determined to be the true.
+  *)
 let unify_uvar x y =
   unify_effect x y;
   unify_fold x y

@@ -176,6 +176,7 @@ and fill_effects_in_app env args tp eff1 =
     | e :: args, TArrow(arr, targ, tres) ->
       let targ', eff' = fill_effects env e in
       unify_subtypes targ' targ;
+      let eff' = Effect.join eff' @@ Arrow.view_eff arr in
       inner args tres (Effect.join eff eff')
     | _ :: _, _ -> Utils.report_internal_error "Application with too many arguments"
   in
@@ -183,6 +184,7 @@ and fill_effects_in_app env args tp eff1 =
   | e :: args, TArrow(arr, targ, tres) ->
     let targ', eff' = fill_effects env e in
     unify_subtypes targ' targ;
+    let eff' = Effect.join eff' @@ Arrow.view_eff arr in
     inner args tres eff'
   |  _ -> Utils.report_internal_error "Application with too many arguments"
 

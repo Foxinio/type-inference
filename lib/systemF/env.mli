@@ -22,4 +22,5 @@ val lookup_ctor : t -> var -> tp * name * tvar list
 
 val tvar_set : t -> TVarSet.t
 
+val fresh_var : t -> var
 val get_ctx : t -> ('a, var_type) PrettyPrinter.ctx
