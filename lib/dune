@@ -8,5 +8,6 @@
    toSystemF
    systemF
    erase
+   eval
    ))
 
