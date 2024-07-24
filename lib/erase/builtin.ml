@@ -3,45 +3,36 @@
 open Ast
 
 let int2int_fun f =
-  EExtern(fun a ->
-  VClo(fun b ->
-  match a, b with
-  | VInt a, VInt b ->
+  EExtern(fun lst ->
+  match lst with
+  | [VInt a; VInt b] ->
     begin try VInt (f a b) with
-    | Division_by_zero -> raise (RuntimeError "Division by zero")
+      | Division_by_zero -> raise (RuntimeError "Division by zero")
     end
-  | _ -> failwith "internal error"))
+  | _ -> failwith "internal error")
 
 let int2bool_fun f =
-  EExtern(fun a ->
-  VClo(fun b ->
-  match a, b with
-  | VInt a, VInt b -> VBool (f a b)
-  | _ -> failwith "internal error"))
-
-let bool2bool_fun f =
-  EExtern(fun a ->
-  VClo(fun b ->
-  match a, b with
-  | VBool a, VBool b -> VBool (f a b)
-  | _ -> failwith "internal error"))
+  EExtern(fun lst ->
+  match lst with
+  | [VInt a; VInt b] -> VBool (f a b)
+  | _ -> failwith "internal error")
 
 let bool1bool_fun f =
   EExtern(fun a ->
   match a with
-  | VBool a -> VBool (f a)
+    | [VBool a] -> VBool (f a)
   | _ -> failwith "internal error")
 
 let pair_fun f =
   EExtern(fun a ->
   match a with
-  | VPair(a,b) -> f (a, b)
+  | [VPair(a,b)] -> f (a, b)
   | _ -> failwith "internal error")
 
 let int1unit_fun f =
   EExtern(fun a ->
   match a with
-  | VInt n ->
+  | [VInt n] ->
     begin try f n with
     | Invalid_argument _ ->
       raise (RuntimeError "Printing of non char")
@@ -51,42 +42,69 @@ let int1unit_fun f =
 let printType str =
   let extern = EExtern(fun a ->
     match a with
-    | VUnit -> print_string str; VUnit
+    (* TODO check why is VUnit here *)
+    | [VUnit] -> print_string str; VUnit
     | _ -> failwith "internal error")
   in
-  EApp(make extern, [make EUnit])
+  EApp(extern, [EUnit])
 
 let readInt =
   EExtern (fun a ->
   match a, read_int_opt () with
-  | VUnit, Some n -> VInt n
-  | VUnit, None -> raise (RuntimeError "Couldn't read int")
+  | [VUnit], Some n -> VInt n
+  | [VUnit], None -> raise (RuntimeError "Couldn't read int")
   | _, _ -> failwith "internal error")
 
+let fail msg =
+  EExtern(fun a ->
+  match a with
+  | [VUnit] -> raise (RuntimeError msg)
+  | _ -> failwith "internal error")
 
 module StringMap = Map.Make(String)
 
 let builtins = [
-    "add",  int2int_fun ( + );
-    "sub",  int2int_fun ( - );
-    "mult", int2int_fun ( * );
-    "div",  int2int_fun ( / );
-    "eq",   int2bool_fun ( = );
-    "le",   int2bool_fun ( <= );
-    "not",  bool1bool_fun ( not );
-    "and",  bool2bool_fun ( && );
-    "or",  bool2bool_fun ( || );
-    "fst",  pair_fun ( fst );
-    "snd",  pair_fun ( snd );
-    "readInt",    readInt;
-    "printInt",   int1unit_fun print_int;
-    "printAscii", int1unit_fun (fun n -> Char.chr n |> print_char);
-    (* "printType" *)
+  "add",  (int2int_fun ( + ), [2]);
+  "sub",  (int2int_fun ( - ), [2]);
+  "mult", (int2int_fun ( * ), [2]);
+  "div",  (int2int_fun ( / ), [2]);
+  "eq",   (int2bool_fun ( = ), [2]);
+  "le",   (int2bool_fun ( <= ), [2]);
+  "not",  (bool1bool_fun not, [1]);
+  "fst",  (pair_fun fst, [1]);
+  "snd",  (pair_fun snd, [1]);
+  "readInt",    (readInt, [1]);
+  "printInt",   (int1unit_fun print_int, [1]);
+  "printAscii", (int1unit_fun (fun n -> Char.chr n |> print_char), [1]);
     (* printType requires special handling so it wont be here *)
 ] |> StringMap.of_list
 
-let lookup_builtin str =
-  StringMap.find str builtins
+let get_arity tp = 
+    let open SystemF in
+    let incr = function
+      | [] -> failwith "internal error"
+      | x :: xs -> (succ x) :: xs in
+    let rec inner = function
+      | TArrow(arr, _, tres) when Arrow.view_fold arr = FldUnfolded ->
+        let xs = inner tres in
+        1 :: xs
+      | TArrow(_, _, tres) ->
+        let xs = inner tres in
+        incr xs
+      | _ -> [0]
+    in match inner tp with
+      | 0 :: xs -> xs
+      | xs -> xs
 
-let lookup_builtin_opt str =
-  StringMap.find_opt str builtins
+let fresh_var () = Core.Imast.IMAstVar.fresh ()
+
+let lookup_builtin str tp_arity =
+  let extern, arity = StringMap.find str builtins in
+  if List.equal (=) tp_arity arity then extern else
+  match tp_arity, arity with
+  | [1;1], [2] ->
+    let x = fresh_var () in
+    let y = fresh_var () in
+    EFn([x], EFn([y], EApp(extern, [EVar x; EVar y])))
+  | 1 :: _, [1] -> extern
+  | _ -> failwith "internal error: builtin coerssion"

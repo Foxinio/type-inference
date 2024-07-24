@@ -1,105 +1,138 @@
 include Ast
 
+let rec take_n tp n =
+  match n, tp with
+  | 0, tp -> tp
+  | n, SystemF.TArrow(_, _, tres) -> take_n tres (n-1)
+  | _ -> failwith "internal error"
 
-
-let rec tr_expr env e =
+let rec tr_expr env (e : SystemF.expr) : Ast.expr * SystemF.tp =
   match e with
-  | SystemF.EUnit ->
-    make EUnit
-	| SystemF.EBool b ->
-    make (EBool b)
-	| SystemF.ENum n ->
-    make (ENum n)
-	| SystemF.EVar x ->
-    make (EVar x)
-	| SystemF.ECoerse (c, e) ->
-    (* TODO: something might be needed to be done here *)
-    tr_expr env e
-	| SystemF.EFn (xs, body) ->
-    let xs' = List.map fst xs in
-    let body' = tr_expr env body in
-    make (EFn (xs', body'))
-	| SystemF.EFix (f, xs, _, body) ->
-    let xs' = List.map fst xs in
-    let body' = tr_expr env body in
-    make (EFix (f, xs', body'))
-  | SystemF.EApp(SystemF.EExtern (s, _, _), [e1; e2])
+  | EUnit -> EUnit, TUnit
+  | EBool b -> EBool b, TBool
+  | ENum n -> ENum n, TInt
+  | EVar x -> EVar x, Env.lookup_var env x
+
+  | EFn (xs, body, tp) ->
+    let env = Env.extend_vars env xs tp in
+    let body', _ = tr_expr env body in
+    EFn (xs, body'), tp
+
+  | SystemF.EFix (f, xs, body, tp) ->
+    let env = Env.extend_vars env xs tp in
+    let body', _ = tr_expr (Env.add_var env f tp) body in
+    EFix (f, xs, body'), tp
+
+  | EApp(EApp(EExtern (s, _), [e1]), [e2])
+  | EApp(EExtern (s, _), [e1; e2])
       when s = "and" ->
-    let open SystemF in
     tr_expr env (EIf(e1, e2, EBool false))
-  | SystemF.EApp(SystemF.EExtern (s, _, _), [e1; e2])
+
+  | EApp(EApp(EExtern (s, _), [e1]), [e2])
+  | EApp(EExtern (s, _), [e1; e2])
       when s = "or" -> 
-    let open SystemF in
     tr_expr env (EIf(e1, EBool true, e2))
-	| SystemF.EApp (e, es) ->
-    let es' = List.map (tr_expr env) es in
-    let e'  = tr_expr env e in
-    make (EApp (e', es'))
-	| SystemF.ETFn (_, body) ->
+
+  | EApp(EExtern (s, _), [e]) ->
+    let _, tp = tr_expr env e in
+    SystemF.PrettyPrinter.pp_type
+      (Env.get_ctx env) tp
+      |> Builtin.printType,
+    TUnit
+
+  | EApp (e1, es) ->
+    let e1', tp = tr_expr env e1 in
+    let es', _ = List.map (tr_expr env) es |> List.split in
+    EApp(e1', es'), take_n tp (List.length es')
+
+  | ETFn (_, body) ->
     tr_expr env body
-	| SystemF.ETApp (e, _) ->
+
+  | ETApp (e, _) ->
     tr_expr env e
-	| SystemF.ELet (x, e1, e2) ->
-    let e1' = tr_expr env e1 in
-    let e2' = tr_expr env e2 in
-    make (ELet(x, e1', e2'))
-	| SystemF.EExtern (s, _, tparg) ->
-    begin match Builtin.lookup_builtin_opt s with
-      | Some e -> make e
-      | None when s = "printType" ->
-        SystemF.PrettyPrinter.string_of_type tparg
-          |> Builtin.printType
-          |> make
-      | None -> failwith "internal error"
+
+  | ELet (x, e1, e2) ->
+    let e1', tp1 = tr_expr env e1 in
+    let env = Env.add_var env x tp1 in
+    let e2', tp2 = tr_expr env e2 in
+    ELet(x, e1', e2'), tp2
+
+  | EExtern (s, tp) ->
+    let arity = Builtin.get_arity tp in
+    Builtin.lookup_builtin s arity, tp
+
+  | EPair (e1, e2) ->
+    let e1', tp1 = tr_expr env e1 in
+    let e2', tp2 = tr_expr env e2 in
+    EPair(e1', e2'), TPair(tp1, tp2)
+
+  | EFst e ->
+    let fn = Builtin.lookup_builtin "fst" [1] in
+    begin match tr_expr env e with
+    | arg, TPair(tp1, _) -> 
+      EApp (fn, [arg]), tp1
+    | _ -> failwith "internal error"
     end
-	| SystemF.EPair (e1, e2) ->
-    let e1' = tr_expr env e1 in
-    let e2' = tr_expr env e2 in
-    make (EPair(e1', e2'))
-	| SystemF.EFst e ->
-    let fn = make @@ Builtin.lookup_builtin "fst" in
-    let arg = tr_expr env e in
-    make (EApp (fn, [arg]))
-	| SystemF.ESnd e ->
-    let fn = make @@ Builtin.lookup_builtin "snd" in
-    let arg = tr_expr env e in
-    make (EApp (fn, [arg]))
-	| SystemF.EIf (cond, then_branch, else_branch) ->
-    let cond' = tr_expr env cond in
-    let then_branch' = tr_expr env then_branch in
-    let else_branch' = tr_expr env else_branch in
-    make (EIf (cond', then_branch', else_branch'))
-	| SystemF.ESeq (e1, e2) ->
-    let e1' = tr_expr env e1 in
-    let e2' = tr_expr env e2 in
-    make (ESeq (e1', e2'))
-	| SystemF.EType (alias, _, ctor_defs, body) ->
-    let env = Env.add_ctors env
+
+  | ESnd e ->
+    let fn = Builtin.lookup_builtin "snd" [1] in
+    begin match tr_expr env e with
+    | arg, TPair(_, tp2) ->  EApp (fn, [arg]), tp2
+    | _ -> failwith "internal error"
+    end
+
+  | EIf (cond, then_branch, else_branch) ->
+    let cond', _ = tr_expr env cond in
+    let then_branch', tp = tr_expr env then_branch in
+    let else_branch', _  = tr_expr env else_branch in
+    EIf (cond', then_branch', else_branch'), tp
+
+  | ESeq (e1, e2) ->
+    let e1', _ = tr_expr env e1 in
+    let e2', tp = tr_expr env e2 in
+    ESeq (e1', e2'), tp
+
+  | EType (alias, _, ctor_defs, body) ->
+    let env = Env.extend_ctors env
       (List.to_seq ctor_defs |> Seq.unzip |> fst) alias in
     tr_expr env body
-	| SystemF.ECtor (ctor_name, body) ->
-    let ctor_name', _ = Env.lookup_ctor env ctor_name in
-    let body' = tr_expr env body in
-    make (ECtor (ctor_name', body'))
-	| SystemF.EMatch (sub_expr, clauses, tp) ->
-    let sub_expr' = tr_expr env sub_expr in
+
+  | ECtor (ctor_name, body) ->
+    let ctor_name', adt_var = Env.lookup_ctor env ctor_name in
+    let body', _ = tr_expr env body in
+    (* at this point only thing that matters is that it's adt
+       not it's arguments *)
+    ECtor (ctor_name', body'), TADT(adt_var, [])
+
+  | EMatch (sub_expr, clauses, tp) ->
+    let sub_expr', _ = tr_expr env sub_expr in
     let clauses' = tr_clauses env tp clauses in
-    make (EMatch (sub_expr', clauses'))
+    EMatch (sub_expr', clauses'), tp
 
 and tr_clauses env tp = function
-  | [] when tp = SystemF.TEmpty -> []
+  | [] when tp = SystemF.TEmpty -> Array.init 0 Obj.magic
   | [] -> failwith "internal error"
   | clauses ->
     let f (ctor_name, x, body) =
       let ctor_name', _ = Env.lookup_ctor env ctor_name in
-      let body' = tr_expr env body in
+      let body', _ = tr_expr env body in
       (ctor_name', x, body')
+    in let rec fill_clauses acc i = function
+      | (ctor_name', _, _ as clause) :: clauses when i+1 = ctor_name' ->
+        fill_clauses (clause :: acc) (i+1) clauses
+      | [] -> List.rev acc
+      | clauses ->
+        let x = Core.Imast.IMAstVar.fresh () in
+        let body = Ast.EApp(Builtin.fail "Match failure", [EUnit]) in
+        fill_clauses ((i, x, body) :: acc) (i+1) clauses
     in
     List.map f clauses
+    |> List.sort (fun (c1, _, _) (c2, _, _) -> compare c1 c2)
+    |> fill_clauses [] 0
+    |> List.map (fun (_, x, e) -> x,e)
+    |> Array.of_list
 
-let tr_program env p =
-  let env = Env.of_varname_tbl env in
-  tr_expr env p
-
-let erase_type (p, env) =
-  tr_program env p
+let erase_type (p,env) =
+  let env' = Env.with_name_map env in
+  let erased, _ = tr_expr env' p in
+  erased, env
