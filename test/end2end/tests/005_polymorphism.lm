@@ -1,5 +1,5 @@
 let f x = x
 
-let _ = f ()
-let _ = f 42
+let _ = f () in
+f 42
 

@@ -17,10 +17,16 @@ let int2bool_fun f =
   | [VInt a; VInt b] -> VBool (f a b)
   | _ -> failwith "internal error")
 
+let bool2bool_fun f =
+  EExtern(fun a ->
+  match a with
+  | [VBool a; VBool b] -> VBool (f a b)
+  | _ -> failwith "internal error")
+
 let bool1bool_fun f =
   EExtern(fun a ->
   match a with
-    | [VBool a] -> VBool (f a)
+  | [VBool a] -> VBool (f a)
   | _ -> failwith "internal error")
 
 let pair_fun f =
@@ -98,13 +104,23 @@ let get_arity tp =
 
 let fresh_var () = Core.Imast.IMAstVar.fresh ()
 
+let string_of_int_list lst =
+  List.map string_of_int lst |> String.concat ","
+
 let lookup_builtin str tp_arity =
-  let extern, arity = StringMap.find str builtins in
+  let extern, arity =
+  match StringMap.find_opt str builtins with
+  | None -> failwith ("Internal error: unbound variable \""^str^"\"")
+  | Some res -> res
+  in
   if List.equal (=) tp_arity arity then extern else
   match tp_arity, arity with
   | [1;1], [2] ->
     let x = fresh_var () in
     let y = fresh_var () in
     EFn([x], EFn([y], EApp(extern, [EVar x; EVar y])))
-  | 1 :: _, [1] -> extern
-  | _ -> failwith "internal error: builtin coerssion"
+  | [1;0], [1]
+  | [2;0], [2] -> extern
+  | _ -> failwith (
+    Printf.sprintf "internal error: builtin coerssion. expected [%s], actual [%s]"
+    (string_of_int_list arity) (string_of_int_list tp_arity))

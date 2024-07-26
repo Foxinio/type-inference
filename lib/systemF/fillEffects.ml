@@ -1,4 +1,5 @@
-open Core
+module Effect = Core.Effect
+open Core.Imast
 open Main
 open Subst
 
@@ -7,7 +8,7 @@ let refresh_tvars = EnsureWellTyped.check_well_scoped
 (* ========================================================================= *)
 (* Analysis *)
 
-let rec unify_subtypes tp1 tp2 =
+let rec unify_subtypes env tp1 tp2 =
   match tp1, tp2 with
   | TUnit, TUnit
   | TEmpty, TEmpty
@@ -16,30 +17,30 @@ let rec unify_subtypes tp1 tp2 =
   | TVar x, TVar y when TVar.compare x y = 0 -> ()
   | TArrow(arr1, ta1, tb1), TArrow(arr2, ta2, tb2) ->
     Arrow.unify_uvar arr1 arr2;
-    unify_subtypes ta2 ta1;
-    unify_subtypes tb1 tb2
+    unify_subtypes env ta2 ta1;
+    unify_subtypes env tb1 tb2
 
   | TForallT(a1, tp1), TForallT(a2, tp2) ->
     let lst = Seq.forever (fun () -> TVar(TVar.fresh ()))
       |> Seq.take (List.length a1)
       |> List.of_seq in
     begin try
-        unify_subtypes (subst_list tp1 a1 lst) (subst_list tp2 a2 lst)
+        unify_subtypes env (subst_list tp1 a1 lst) (subst_list tp2 a2 lst)
       with Invalid_argument _ ->
-        Utils.report_internal_error "SystemF: unbound tvar"
+        Utils.report_unbound_tvar ()
     end
 
   | TPair (tp1a, tp1b), TPair (tp2a, tp2b) ->
-    unify_subtypes tp1a tp2a;
-    unify_subtypes tp1b tp2b
+    unify_subtypes env tp1a tp2a;
+    unify_subtypes env tp1b tp2b
 
   | (TUnit | TEmpty | TBool | TInt | TVar _  | TADT (_, _)
     | TArrow (_, _, _) | TPair(_, _) | TForallT (_, _)), _ ->
-    Utils.report_internal_error "cannot unity in systemF"
+    Utils.report_type_missmatch ~env tp1 tp2
 
-let unify_eqtype tp1 tp2 =
-  unify_subtypes tp1 tp2;
-  unify_subtypes tp2 tp1
+let unify_eqtype env tp1 tp2 =
+  unify_subtypes env tp1 tp2;
+  unify_subtypes env tp2 tp1
 
 let extend_var env xs tp =
   let rec inner env xs tp arr =
@@ -92,7 +93,7 @@ let rec fill_effects env e =
     | TForallT(args, body), eff when List.length args = List.length tps ->
       let tps = List.map (refresh_tvars env) tps in
       subst_list body args tps, eff
-    | _ -> failwith "Internal type error"
+    | actual, _ -> Utils.report_unexpected_type ~env actual "TForallT"
     end
 
   | ELet(x, e1, e2) ->
@@ -112,20 +113,20 @@ let rec fill_effects env e =
   | EFst e ->
     begin match fill_effects env e with
     | TPair (tp1, _), eff -> tp1, eff
-    | _ -> failwith "Internal type error"
+    | actual, _ -> Utils.report_unexpected_type ~env actual "TPair"
     end
 
   | ESnd e ->
     begin match fill_effects env e with
     | TPair(_, tp2), eff -> tp2, eff
-    | _ -> failwith "Internal type error"
+    | actual, _ -> Utils.report_unexpected_type ~env actual "TPair"
     end
 
   | EIf(e1, e2, e3) ->
     let eff1 = check_type env e1 TBool in
     let tp2, eff2 = fill_effects env e2 in
     let tp3, eff3 = fill_effects env e3 in
-    unify_eqtype tp2 tp3;
+    unify_eqtype env tp2 tp3;
     tp2, Effect.join eff1 (Effect.join eff2 eff3)
 
   | ESeq(e1, e2) ->
@@ -141,7 +142,7 @@ let rec fill_effects env e =
   | ECtor (name, body) ->
     let expected, alias, tvars = Env.lookup_ctor env name in
     let tp, eff = fill_effects env body in
-    let adt_args = Subst.get_subst (Env.tvar_set env) expected tp |> List.map snd in
+    let _, adt_args = Subst.get_subst (Env.tvar_set env) expected tp in
     TADT (alias, adt_args), eff
 
   | EMatch(body, defs, tp) ->
@@ -150,7 +151,7 @@ let rec fill_effects env e =
     | TADT(alias, args), _ ->
       let f (ctor, x, e) =
         let expected, alias', tvars = Env.lookup_ctor env ctor in
-        assert (Imast.IMAstVar.compare alias alias' = 0);
+        assert (IMAstVar.compare alias alias' = 0);
         let substituted = Subst.subst_list expected tvars args in
         let env = Env.add_var env x substituted in
         let _ = check_type env e tp' in
@@ -161,12 +162,12 @@ let rec fill_effects env e =
     | TEmpty, eff1 ->
       assert(List.length defs = 0);
       tp', eff1
-    | _ -> failwith "internal type error"
+    | actual, _ -> Utils.report_unexpected_type ~env actual "TADT or TEmpty"
     end
 
 and check_type env e tp =
   let tp', eff' = fill_effects env e in
-  unify_subtypes tp' tp;
+  unify_subtypes env tp' tp;
   eff'
 
 and fill_effects_in_app env args tp eff1 =
@@ -175,18 +176,18 @@ and fill_effects_in_app env args tp eff1 =
     | [], tres -> tres, eff
     | e :: args, TArrow(arr, targ, tres) ->
       let targ', eff' = fill_effects env e in
-      unify_subtypes targ' targ;
+      unify_subtypes env targ' targ;
       let eff' = Effect.join eff' @@ Arrow.view_eff arr in
       inner args tres (Effect.join eff eff')
-    | _ :: _, _ -> Utils.report_internal_error "Application with too many arguments"
+    | _ :: _, _ -> Utils.report_too_many_arguments ()
   in
   match args, tp with
   | e :: args, TArrow(arr, targ, tres) ->
     let targ', eff' = fill_effects env e in
-    unify_subtypes targ' targ;
+    unify_subtypes env targ' targ;
     let eff' = Effect.join eff' @@ Arrow.view_eff arr in
     inner args tres eff'
-  |  _ -> Utils.report_internal_error "Application with too many arguments"
+  |  _ -> Utils.report_too_many_arguments ()
 
 (* ========================================================================= *)
 (* Transformation *)
@@ -247,7 +248,7 @@ let rec transform_expr env e : expr * tp * Effect.t =
       ETApp (e', tps),
       subst_list body args tps,
       eff
-    | _ -> failwith "Internal type error"
+    | _, actual, _ -> Utils.report_unexpected_type ~env actual "TForallT"
     end
 
   | ELet (x, e1, e2) ->
@@ -265,14 +266,14 @@ let rec transform_expr env e : expr * tp * Effect.t =
     begin match transform_expr env e with
     | e', TPair (tp1, _), eff ->
       EFst e', tp1, eff
-    | _ -> failwith "internal type error"
+    | _, actual, _ -> Utils.report_unexpected_type ~env actual "TPair"
     end
 
   | ESnd e ->
     begin match transform_expr env e with
     | e', TPair (_, tp2), eff ->
       ESnd e', tp2, eff
-    | _ -> failwith "internal type error"
+    | _, actual, _ -> Utils.report_unexpected_type ~env actual "TPair"
     end
 
   | EIf (e1, e2, e3) ->
@@ -295,7 +296,7 @@ let rec transform_expr env e : expr * tp * Effect.t =
   | ECtor (name, body) ->
     let expected, alias, tvars = Env.lookup_ctor env name in
     let body', tp, eff = transform_expr env body in
-    let adt_args = Subst.get_subst (Env.tvar_set env) expected tp |> List.map snd in
+    let _, adt_args = Subst.get_subst (Env.tvar_set env) expected tp in
     ECtor (name, body'),
     TADT (alias, adt_args), eff
 
@@ -315,7 +316,7 @@ let rec transform_expr env e : expr * tp * Effect.t =
     | TEmpty ->
       assert(List.length clauses = 0);
       []
-    | _ -> failwith "internal type error"
+    | actual -> Utils.report_unexpected_type ~env actual "TADT or TEmpty"
     in EMatch (body', clauses', tp), tp, EffImpure
 
 (** Setup application to match conditions presented in EnsureWellTyped
@@ -334,14 +335,14 @@ and transform_app env (e1', tp1, eff1) es' =
       inner1 (e'::acc) es' tres (Effect.join eff eff')
     | [], _ -> List.rev acc, [], tp, eff
     | _::_, _ ->
-      Utils.report_internal_error "Application with too many arguments"
+      Utils.report_too_many_arguments ()
 
   and inner2 es' tp eff =
     match es', tp with
     | (e', eff') :: es', TArrow(_, _, tres) ->
       e', es', tres, Effect.join eff eff'
     | [], _ -> failwith "impossible"
-    | _, _ -> failwith "internal type error"
+    | _, actual -> Utils.report_unexpected_type ~env actual "TArrow"
 
   and inner3 acc es' tp =
     match es', tp with

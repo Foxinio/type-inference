@@ -1,3 +1,6 @@
-let f x = x
+let f x =
+	let g x = x in
+	g x
+in
 
-let _ = f ()
+f ()

@@ -14,4 +14,4 @@ let compare (major1,minor1,_) (major2,minor2,_) =
   else cmp
 
 let to_string (major,minor,eff) = string_of_int major ^ "."
-  ^ string_of_int minor ^ ";"
+  ^ string_of_int minor

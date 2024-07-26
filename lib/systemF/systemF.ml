@@ -4,7 +4,8 @@ let transform_with_folding = FillFolding.transform_with_folding
 
 let pp_program (p,env) =
   let ctx = Env.with_name_map env |> Env.get_ctx in
-  PrettyPrinter.pp_expr ctx p
+  let str = PrettyPrinter.pp_expr ctx p in
+  str
 
 include Main
 include Order

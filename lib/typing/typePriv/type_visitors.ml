@@ -1,30 +1,28 @@
 open Main
 open Uvar
 
-let rec iter f : t -> unit =
-  let default t = match t with
+let iter f : t -> unit =
+  let rec default t = match t with
     | TUnit | TEmpty | TBool | TInt | TVar _
     | TUVar ({contents={value=Unrealised _;_}}) -> ()
     | TUVar ({contents={value=Realised tp;_}}) ->
-      iter f tp
+      f default tp
     | TADT (_, _, tps) ->
-       List.iter (iter f) tps
+       List.iter (f default) tps
     | TArrow (tps, tp) ->
-      iter f tps;
-      iter f tp
+      f default tps;
+      f default tp
     | TPair (tp1, tp2) ->
-      iter f tp1;
-      iter f tp2
+      f default tp1;
+      f default tp2
   in
   f default
 
 let rec fold_map f init =
   let default acc t = match t with
     | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar ({contents={value=Unrealised _;_}}) -> acc, t
-    | TUVar ({contents={value=Realised tp;_}} as x) ->
-      let acc, tp = fold_map f acc tp in
-      Uvar.set_uvar x tp;
-      acc, TUVar x
+    | TUVar {contents={value=Realised tp;_}} ->
+      fold_map f acc tp
     | TADT (name, lvl, tps) ->
       let acc, tps = List.fold_left_map (fold_map f) acc tps in
       acc, TADT (name, lvl, tps)
@@ -41,34 +39,36 @@ let rec fold_map f init =
 
 
 
-let rec map f : t -> t =
-  let default t = match t with
+let map f : t -> t =
+  let rec default t =
+    match t with
     | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar ({contents={value=Unrealised _;_}}) -> t
-    | TUVar ({contents={value=Realised tp;_}} as x) ->
-      Uvar.set_uvar x (map f tp);
-      TUVar x
+    | TUVar {contents={value=Realised tp;_}} ->
+      f default tp
     | TADT (name, lvl, tps) ->
-      TADT (name, lvl, List.map (map f) tps)
+      TADT (name, lvl, List.map (f default) tps)
     | TArrow (tps, tp) ->
-      TArrow (map f tps, map f tp)
+      TArrow (f default tps, f default tp)
     | TPair (tp1, tp2) ->
-      TPair (map f tp1, map f tp2)
+      TPair (f default tp1, f default tp2)
   in
   f default
 
-let rec foldl f init t =
-  let rec default init t = match t with
+let foldl (f : ('a -> t -> 'a) -> 'a -> t -> 'a) (init : 'a) (tp : t) =
+  let rec default init (tp : t) = match tp with
     | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar ({contents={value=Unrealised _;_}}) -> init
-    | TADT (_, _, tps) ->
-      List.fold_left (foldl f) init tps
-    | TUVar ({contents={value=Realised tp;_}}) ->
-      foldl f (f default init tp) tp
     | TPair (tp1, tp2) ->
-      let init = foldl f (f default init tp1) tp1 in
-      let init = foldl f (f default init tp2) tp2 in
+      let init = f default init tp1 in
+      let init = f default init tp2 in
       init
-    | TArrow (tps, tp) ->
-      foldl f (f default init tp) tps
+    | TArrow (targ, tres) ->
+      let init = f default init targ in
+      let init = f default init tres in
+      init
+    | TADT (_, _, tps) ->
+      List.fold_left (f default) init tps
+    | TUVar ({contents={value=Realised tp;_}}) ->
+      f default init tp
   in
-  foldl f (f default init t) t
+  f default init tp
 

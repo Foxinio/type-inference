@@ -1,0 +1,3 @@
+if (and true (or true false))
+then printType printInt
+else printType ()

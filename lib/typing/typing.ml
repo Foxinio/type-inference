@@ -9,7 +9,11 @@ module TVarMap = Type.TVarMap
 
 module Type = Type
 
-module Schema = Schema
+module Schema = struct
+  include Schema
+  let instantiate ?mapping lvl typ =
+    instantiate ?mapping lvl typ |> fst
+end
 
 module PrettyPrint = PrettyPrinter
 module Level = Type.Level

@@ -26,7 +26,7 @@ module Schema : sig
   val typ_mono : t -> typ
   val typ_schema : TVarSet.t -> t -> typ
 
-  val instantiate : ?mapping:t TVarMap.t -> Level.t -> typ -> t
+  val instantiate : ?mapping:t TVarMap.t -> Level.t -> typ -> t * t list
   val generalize : Level.t -> t -> typ
 
   val get_arguments : typ -> TVarSet.t
@@ -37,6 +37,8 @@ module UVarSet : Set.S with type elt = uvar
 
 val fresh_uvar : Level.t -> t
 val fresh_tvar : unit -> t
+
+val string_of_uvar : uvar -> string
 
 val t_unit  : t
 val t_empty : t

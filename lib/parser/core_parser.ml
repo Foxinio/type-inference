@@ -31,4 +31,9 @@ let parse_file fname =
         lexbuf.Lexing.lex_curr_p
         "unexpected token `%s'"
         (Lexing.lexeme lexbuf)
+    | YaccParser.Error ->
+      Utils.report_error_pp
+        lexbuf.Lexing.lex_start_p
+        lexbuf.Lexing.lex_curr_p
+        "syntax error"
   )

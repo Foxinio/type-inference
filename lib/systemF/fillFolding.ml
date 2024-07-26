@@ -20,6 +20,12 @@ let extend_var env xs tp =
     inner (Env.add_var env x tp1) xs tp2 arr
   | _ -> failwith "internal error: expected TArrow"
 
+let rec mark_unfolded env = function
+  | TArrow(_, _, (TArrow (_,_,_) as tres)) -> mark_unfolded env tres
+  | TArrow(arr, _, _) -> Arrow.set_unfolded arr
+  | tp -> Utils.report_internal_error "Expected TArrow: %s"
+    (PrettyPrinter.pp_type (Env.get_ctx env) tp)
+
 let rec fill_unfolds env e =
   let open Effect in
   match e with
@@ -66,7 +72,8 @@ let rec fill_unfolds env e =
     let tp2 = fill_unfolds env e2 in
     tp2
 
-  | EExtern(_, tp) ->
+  | EExtern(name, tp) ->
+    mark_unfolded env tp;
     refresh_tvars env tp
 
   | EPair(e1, e2) ->
@@ -105,8 +112,7 @@ let rec fill_unfolds env e =
   | ECtor (name, body) ->
     let expected, alias, tvars = Env.lookup_ctor env name in
     let tp = fill_unfolds env body in
-    let adt_args = Subst.get_subst (Env.tvar_set env) expected tp
-      |> List.map snd in
+    let _, adt_args = Subst.get_subst (Env.tvar_set env) expected tp in
     TADT (alias, adt_args)
 
   | EMatch(body, defs, tp) ->
@@ -280,8 +286,7 @@ let rec transform_expr env e : expr * tp * Effect.t =
   | ECtor (name, body) ->
     let expected, alias, tvars = Env.lookup_ctor env name in
     let body', tp, eff = transform_expr env body in
-    let adt_args = Subst.get_subst (Env.tvar_set env) expected tp
-      |> List.map snd in
+    let _, adt_args = Subst.get_subst (Env.tvar_set env) expected tp in
     ECtor (name, body'), TADT (alias, adt_args), eff
 
   | EMatch (body, clauses, tp) ->

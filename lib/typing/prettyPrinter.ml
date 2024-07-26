@@ -1,4 +1,5 @@
 open Type
+module Utils = Core.Utils
 
 (* ========================================================================== *)
 (* Pretty printing of types *)
@@ -11,49 +12,53 @@ type ('a, 'b, 'c) vars =
 type ('a, 'b, 'c) ctx_struct = {
   env:   (('a, 'b, 'c) vars * string) list;
   uvars: int;
-  anons: int
+  anons: int;
+  named: int;
 }
 
 type ('a, 'b, 'c) ctx = ('a, 'b, 'c) ctx_struct ref
 
-let type_name_gen i =
-  let limit = (Char.code 'z') - (Char.code 'a') + 1 in
-  let rec inner i =
-    if i >= 0 && i < limit then Char.chr i |> String.make 1 
-    else
-      let minor = i mod limit |> inner
-      and major = i / limit |> inner in
-      major ^ minor
-  in
-  inner i
-
 (* ========================================================================== *)
 (** Creates fresh pretty-printing context *)
-let pp_context () = ref {env=[]; uvars=0; anons=0}
+let pp_context () = ref {env=[]; uvars=0; anons=0; named=0; }
 
 let pp_context_of_seq var_seq = 
   ref {
     env=List.of_seq var_seq |> List.map (fun (k, v) -> (NamedVar k, v));
-    uvars=0; anons=0}
+    uvars=0; anons=0; named=0; }
 
 let pp_at_level l lvl str =
   if lvl > l then Printf.sprintf "(%s)" str
   else str
 
+let cmp x y =
+  match x, y with
+  | NamedVar x, NamedVar y -> Core.Imast.IMAstVar.compare x y = 0
+  | AnonVar x,  AnonVar y -> TVar.compare x y = 0
+  | UVar x, UVar y -> Type.uvar_compare x y = 0
+  | _ -> false
+
+let rec assq_opt x = function
+  | (y, v) :: _ when cmp x y -> Some v
+  | _ :: xs -> assq_opt x xs
+  | [] -> None
+
 let pp_context_lookup x ctx =
-  let { env; uvars; anons } = !ctx in
-  match x, List.assq_opt x env with
+  let { env; uvars; anons; named; } = !ctx in
+  match x, assq_opt x env with
     | _, Some str -> str
-    | NamedVar x, None ->
+    | NamedVar _, None ->
       (* this shouldn't happen, internal error *)
-      raise Not_found
-    | AnonVar _, None ->
-      let name = "'" ^ type_name_gen anons in
-      ctx := { env=(x, name) :: env; uvars; anons=anons+1 };
+      let name = "#" ^ Utils.type_name_gen named in
+      ctx := { !ctx with env=(x, name) :: env; named=named+1 };
       name
-    | UVar _, None ->
-      let name = "?" ^ type_name_gen uvars in
-      ctx := { env=(x, name) :: env; uvars=uvars+1; anons };
+    | AnonVar _, None ->
+      let name = "'" ^ Utils.type_name_gen anons in
+      ctx := { !ctx with env=(x, name) :: env; anons=anons+1 };
+      name
+    | UVar uv, None ->
+      let name = "?" ^ Type.string_of_uvar uv ^ Utils.type_name_gen uvars in
+      ctx := { !ctx with env=(x, name) :: env; uvars=uvars+1 };
       name
 
 
@@ -88,3 +93,19 @@ let rec pp_type ctx lvl tp =
 let pp_type ctx = pp_type ctx 0
 
 let string_of_type = pp_type (pp_context ())
+
+(* ========================================================================== *)
+(** PrettyPrint expression *)
+
+let pp_expr_with_ctx ctx e =
+  let string_of_var x = pp_context_lookup (NamedVar x) ctx in
+  let string_of_type tp = pp_type ctx @@ Schema.get_template tp in
+  Core.Imast.string_of_expr e string_of_var string_of_type
+
+let pp_expr_with_tbl tbl e =
+  let open Core.Imast in
+  let string_of_var x = VarTbl.find tbl x in
+  let string_of_type tp = pp_type (pp_context_of_seq (VarTbl.to_seq tbl))
+    @@ Schema.get_template tp in
+  string_of_expr e string_of_var string_of_type
+

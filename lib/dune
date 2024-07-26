@@ -1,5 +1,5 @@
 (library
- (name prototyp_lib)
+ (name pipeline)
  (libraries
    core
    core_parser

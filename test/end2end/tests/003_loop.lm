@@ -1,4 +1,4 @@
-let rec f x = f x
+let rec f x = f x in
 
-let _ = f ()
+f ()
 //@ loops: true

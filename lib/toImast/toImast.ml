@@ -36,7 +36,8 @@ let translate (p : Ast.program) : program =
       | Ast.EUnit -> EUnit
       | Ast.EBool b -> EBool b
       | Ast.ENum  n -> ENum n
-      | Ast.EVar (s,t) -> EVar (env_find node s gamma_env, conv_type delta_env t)
+      | Ast.EVar (s,lst) ->
+        EVar (env_find node s gamma_env, List.map (conv_type delta_env) lst)
       | Ast.EExtern (s, eff, t) ->
         EExtern (s, eff, conv_type delta_env t)
       | Ast.EFn ((x, xt), e) ->
@@ -89,14 +90,18 @@ let translate (p : Ast.program) : program =
         ETypeAlias ((name', args'), rhs', e')
       | Ast.EType ((alias_name, alias_args), ctor_list, rest) ->
         let alias_name', _ = fresh_var (alias_name, THole) in
-        let delta_env_with_alias_name = StringMap.add alias_name alias_name' delta_env in
-        let delta_env_with_alias_args, alias_args' = extend_delta delta_env_with_alias_name alias_args in
+        let delta_env_with_alias_name =
+          StringMap.add alias_name alias_name' delta_env in
+        let delta_env_with_alias_args, alias_args' =
+          extend_delta delta_env_with_alias_name alias_args in
         let f (ctor_name, ctor_type) = 
           let ctor_name' = IMAstVar.fresh () in
           VarTbl.add vartbl ctor_name' ctor_name;
-          ((ctor_name, ctor_name'), (ctor_name', conv_type delta_env_with_alias_args ctor_type))
+          ((ctor_name, ctor_name'),
+           (ctor_name', conv_type delta_env_with_alias_args ctor_type))
         in
-        let delta_env, ctor_list' = extend_map f ctor_list delta_env_with_alias_name in
+        let delta_env, ctor_list' =
+          extend_map f ctor_list delta_env_with_alias_name in
         let rest' = inner gamma_env delta_env rest in
         EType((alias_name', alias_args'), ctor_list', rest')
       | Ast.ECtor (name, e) ->
@@ -138,6 +143,4 @@ let translate (p : Ast.program) : program =
   try inner StringMap.empty StringMap.empty p, vartbl
   with Out_of_scope (s, node) ->
     Utils.report_error node "Undefined variable: %s\n" s
-
-
 

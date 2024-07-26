@@ -20,11 +20,22 @@ let rec tr_type env (tp : Type.t) : SystemF.tp =
   | TADT(a, _, tps) ->
     SystemF.TADT(a, List.map (tr_type env) tps)
 
+let tr_poly_typ env typ =
+  let tp = Schema.get_template typ
+  and args = Schema.get_arguments typ |> TVarSet.to_list in
+  if List.is_empty args then tr_type env tp, env, [] else
+  let env, args' = Env.extend_tvar env args in
+  SystemF.TForallT(args', tr_type env tp), env, args'
+
+let tr_poly_var env (name,typ) =
+  let tp, env, forall = tr_poly_typ env typ in
+  (name, tp), env, forall
+
 let tr_typ env typ =
   tr_type env @@ Schema.get_template typ
 
-let tr_var env (name,tp) =
-  name, tr_typ env tp
+let tr_var env (name,typ) =
+  name, tr_typ env typ
 
 let rec mark_impure env = function
   | SystemF.TArrow(_, _, (TArrow (_,_,_) as tres)) -> mark_impure env tres
@@ -37,12 +48,13 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
   | Imast.EUnit -> SystemF.EUnit
   | Imast.EBool b -> SystemF.EBool b
   | Imast.ENum n -> SystemF.ENum n
-  | Imast.EVar (name, tp) ->
-    let xs = Subst.get_subst
-      (Schema.get_template tp)
-      (Schema.get_template e.typ)
-      |> List.map (fun (_, tp) -> tr_type env tp) in
-    SystemF.ETApp (SystemF.EVar name, xs)
+  | Imast.EVar (name, tapp_args) ->
+    let var = SystemF.EVar name in
+    let template, xs = Env.lookup_var env name in
+    Checks.check_arg_amount_correctness xs tapp_args;
+    if List.is_empty xs then var else
+    let tapp_args' = List.map (tr_typ env) tapp_args in
+    SystemF.ETApp (var, tapp_args')
 
   | Imast.EExtern (name, eff, tp) ->
     let tp' = tr_typ env tp in
@@ -50,28 +62,28 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
     SystemF.EExtern (name, tp')
 
   | Imast.EFn(x, body) ->
-    let x', tp = tr_var env x in
-    let xs, body = fold_fn env body in
+    let xs, env, body = fold_fn env e in
     let tp = tr_typ env e.typ in
-    SystemF.EFn(x' :: xs, tr_expr env body, tp)
+    SystemF.EFn(xs, tr_expr env body, tp)
 
   | Imast.EFix(f, x, body) ->
-    let f, tp = tr_var env f in
-    let x', _ = tr_var env x in
-    let xs, body = fold_fn env body in
-    SystemF.EFix(f, x' :: xs, tr_expr env body, tp)
+    let f' = tr_var env f in
+    let env = Env.add_var env f' in
+    let xs, env, body = fold_fn env e in
+    SystemF.EFix(fst f, xs, tr_expr env body, snd f')
 
   | Imast.EApp(e1, e2) ->
     let e2' = tr_expr env e2 in
     SystemF.EApp (tr_expr env e1, [e2'])
 
-  | Imast.ELet((x, tp), e1, e2) ->
-    let env', tvars = Env.extend_tvar env
-        @@ TVarSet.to_list
-        @@ Schema.get_arguments tp in
+  | Imast.ELet(x, e1, e2) ->
+    let x', env', tvars = tr_poly_var env x in
     let e1' = tr_expr env' e1 in
+    let env = Env.add_var env x' in
     let e2' = tr_expr env e2 in
-    SystemF.ELet(x, SystemF.ETFn(tvars, e1'), e2')
+    if List.is_empty tvars
+    then SystemF.ELet(fst x, e1', e2')
+    else SystemF.ELet(fst x, SystemF.ETFn(tvars, e1'), e2')
 
   | Imast.EPair(e1, e2) ->
     SystemF.EPair(tr_expr env e1, tr_expr env e2)
@@ -108,15 +120,26 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
     let clauses' = List.map f clauses in
     SystemF.EMatch(tr_expr env sub_expr, clauses', tp)
 
-and fold_fn env body =
-  let rec inner (body : Schema.typ Imast.expr) =
+and fold_fn env (body : Schema.typ Imast.expr) =
+  let rec inner env acc (body : Schema.typ Imast.expr) =
     match body.data with
     | Imast.EFn (x, body) ->
-      let x', _ = tr_var env x in
-      let xs, body' = inner body in
-      x'::xs, body'
-    | _ -> [], body
-  in inner body
+      let x' = tr_var env x in
+      let env = Env.add_var env x' in
+      inner env (fst x'::acc) body
+    | _ -> List.rev acc, env, body
+  in match body.data with
+  | Imast.EFn (x, body) ->
+    let x' = tr_var env x in
+    let env = Env.add_var env x' in
+    let res, env, body = inner env [] body in
+    fst x' :: res, env, body
+  | Imast.EFix(_, x, body) ->
+    let x' = tr_var env x in
+    let env = Env.add_var env x' in
+    let res, env, body = inner env [] body in
+    fst x' :: res, env, body
+  | _ -> failwith "ToSystemF.fold_fn called with wrong argument"
 
 let tr_program ((p,env) : program) : SystemF.program =
   tr_expr Env.empty p, env

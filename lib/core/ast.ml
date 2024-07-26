@@ -14,7 +14,8 @@ module Make(VarType : sig type t end) = struct
 
   type var_type = VarType.t
 
-  type 'typ var       = var_type * 'typ
+  type      var_name  = var_type
+  type 'typ var_def   = var_type * 'typ
   type      ctor_name = var_type
   type 'typ ctor_def  = ctor_name * 'typ
   type      alias     = var_type * var_type list 
@@ -24,12 +25,12 @@ module Make(VarType : sig type t end) = struct
     | EUnit
     | EBool   of bool
     | ENum    of int
-    | EVar    of 'typ var
+    | EVar    of var_name * 'typ list
     | EExtern of string  * Effect.t * 'typ
-    | EFn     of 'typ var * 'typ expr
-    | EFix    of 'typ var * 'typ var * 'typ expr
+    | EFn     of 'typ var_def * 'typ expr
+    | EFix    of 'typ var_def * 'typ var_def * 'typ expr
     | EApp    of 'typ expr * 'typ expr
-    | ELet    of 'typ var * 'typ expr * 'typ expr
+    | ELet    of 'typ var_def * 'typ expr * 'typ expr
     | EPair   of 'typ expr * 'typ expr
     | EFst    of 'typ expr
     | ESnd    of 'typ expr
@@ -42,7 +43,7 @@ module Make(VarType : sig type t end) = struct
     (* EMatch is equivalent to EUnfold *)
     | EMatch  of 'typ expr * 'typ clause list
 
-  and 'typ clause = ctor_name * 'typ var * 'typ expr
+  and 'typ clause = ctor_name * 'typ var_def * 'typ expr
 
   type expl_type =
     | TUnit
@@ -118,6 +119,40 @@ module Make(VarType : sig type t end) = struct
         type_foldl f (f default init tpres) tparg
     in
     type_foldl f (f default init t) t
+
+  let string_of_expr e string_of_name string_of_typ =
+    let rec string_of_data data =
+      match data with
+      | EUnit -> "EUnit"
+      | EBool b  -> "EBool "^string_of_bool b
+      | ENum n  -> "ENum ^"^string_of_int n
+      | EVar (x,tps)  -> "EVar "^string_of_var (x,tps)
+      | EExtern (name, _, _)  -> "EExtern "^name
+      | EFn (x, e)  -> "EFn "^string_of_var_def x^" -> "^aux e
+      | EFix (f, x, e)  -> "EFix "^string_of_var_def f^" "^string_of_var_def x^" -> "^aux e
+      | EApp (e1, e2)  -> "EApp "^aux e1^" "^aux e2
+      | ELet (x, e1, e2)  -> "ELet "^string_of_var_def x^" "^aux e1^"\n"^aux e2
+      | EPair (e1, e2)  -> "EPair "^aux e1^" "^aux e2
+      | EFst e  -> "EFst "^aux e
+      | ESnd e  -> "ESnd "^aux e
+      | EIf (e1, e2, e3)  -> "EIf "^aux e1^" "^aux e2^" "^aux e3
+      | ESeq (e1, e2)  -> "ESeq "^aux e1^" "^aux e2
+      | ETypeAlias (_, _, e) -> "ETypeAlias "^aux e
+      | EType (_, _, e) -> "EType "^aux e
+      | ECtor (name, e) -> "ECtor "^string_of_name name^" "^aux e
+      | EMatch (e, cl) ->
+        let clauses = List.map aux_clause cl |> String.concat " " in
+        "EMatch "^aux e^" "^clauses
+    and aux_clause (ctor_name, var, e) =
+      "("^string_of_name ctor_name^" "
+         ^string_of_var_def var^" "^aux e^")"
+    and string_of_var_def (x,tp) =
+      "("^string_of_name x^" : "^string_of_typ tp^")"
+    and string_of_var (x,tps) =
+      let strs = List.map string_of_typ tps |> String.concat ", " in
+        "("^string_of_name x^" [" ^ strs ^ "])"
+    and aux e = "("^string_of_data e.data^" : "^string_of_typ e.typ^")"
+    in aux e
 end
 
 

@@ -1,6 +1,8 @@
 open Main
 open Printf
 
+module Utils = Core.Utils
+
 (* ========================================================================= *)
 (* Pretty printing of types *)
 
@@ -15,17 +17,6 @@ type ('a, 'c) ctx_struct = {
 }
 
 type ('a, 'c) ctx = ('a, 'c) ctx_struct ref
-
-let type_name_gen i =
-  let limit = (Char.code 'z') - (Char.code 'a') + 1 in
-  let rec inner i =
-    if i >= 0 && i < limit then Char.chr i |> String.make 1 
-    else
-      let minor = i mod limit |> inner
-      and major = i / limit |> inner in
-      major ^ minor
-  in
-  inner i
 
 (* ========================================================================= *)
 (** Creates fresh pretty-printing context *)
@@ -43,19 +34,37 @@ let pp_at_level l lvl str =
   if lvl > l then sprintf "(%s)" str
   else str
 
+let cmp x y =
+  match x, y with
+  | NamedVar x, NamedVar y -> Core.Imast.IMAstVar.compare x y = 0
+  | AnonVar x,  AnonVar y -> TVar.compare x y = 0
+  | _ -> false
+
+let rec assq_opt x = function
+  | (y, v) :: _ when cmp x y -> Some v
+  | _ :: xs -> assq_opt x xs
+  | [] -> None
+
 let pp_context_lookup x ctx =
   let { env; anons; named } = !ctx in
-  match x, List.assq_opt x env with
+  match x, assq_opt x env with
     | _, Some str -> str
-    | NamedVar _, None ->
+    | NamedVar y, None ->
       (* this shouldn't happen, internal error *)
-      let name = "#" ^ type_name_gen named in
+      let name = "#" ^ Utils.type_name_gen named in
         ctx := { !ctx with env=(x, name) :: env; named=named+1 };
         name
     | AnonVar _, None ->
-      let name = "'" ^ type_name_gen anons in
+      let name = "'" ^ Utils.type_name_gen anons in
       ctx := { !ctx with env=(x, name) :: env; anons=anons+1 };
       name
+
+let arr_str arr =
+  match Arrow.view arr with
+  | EffPure, FldUnfolded   -> "->p"
+  | EffPure, FldFolded     -> ","
+  | EffImpure, FldUnfolded -> "->i"
+  | EffImpure, FldFolded   -> ",'"
 
 let rec pp_type ctx lvl = function
   | TVar x -> pp_context_lookup (AnonVar x) ctx
@@ -69,16 +78,10 @@ let rec pp_type ctx lvl = function
   | TBool  -> "Bool"
   | TInt   -> "Int"
   | TArrow(arr, targ, tres) ->
-      let arr_str =
-        match Arrow.view arr with
-        | EffPure, FldUnfolded   -> "->p"
-        | EffPure, FldFolded     -> ",  "
-        | EffImpure, FldUnfolded -> "->i"
-        | EffImpure, FldFolded   -> ",' "
-      in
+      let arr_str = arr_str arr in
       pp_at_level 0 lvl
         (sprintf "%s %s %s"
-          (pp_type ctx 0 targ)
+          (pp_type ctx 1 targ)
           arr_str
           (pp_type ctx 0 tres))
   | TPair(tp1, tp2) ->
@@ -107,13 +110,26 @@ let endline' indent str =
   sprintf "\n  %s%s" indent str
 
 let fun_lvl = 0
-let app_lvl = 1
 let tapp_lvl = 1
-let def_lvl = 2
-let pair_lvl = 3
-let if_lvl = 4
-let seq_lvl = 5
-let match_lvl = 6
+let app_lvl = 2
+let def_lvl = 3
+let pair_lvl = 4
+let if_lvl = 5
+let seq_lvl = 6
+let match_lvl = 7
+
+let get_purity xs tp =
+  let rec inner arr = function
+    | _::xs, TArrow(_, _, tres) ->
+      inner arr (xs, tres)
+    | [], _ ->
+      if Arrow.view_eff arr = EffPure
+      then "p"
+      else "i"
+    | _, _ -> failwith "impossible"
+  in match xs, tp with
+    | _ :: xs, TArrow(arr, _, tres) -> inner arr (xs, tres)
+    | _ -> failwith "impossible"
 
 let rec pp_expr (indent : string) ctx (lvl : int) : expr -> string = function
   | EUnit -> "()"
@@ -129,11 +145,14 @@ let rec pp_expr (indent : string) ctx (lvl : int) : expr -> string = function
   | EFn (xs, body, tp) ->
     let vars, tres = pp_fn_args ctx xs tp in
     let tstr = pp_type ctx tres in
+    let purity = get_purity xs tp in
     let body_str = pp_expr (indent^"  ") ctx fun_lvl body in
     pp_at_level fun_lvl lvl
-      (sprintf "fun %s : %s ->%s"
+      (sprintf "fun %s : %s ->%s%s"
         (String.concat " " vars)
-        tstr @@ endline' indent body_str)
+        tstr
+        purity
+        (endline' indent body_str))
 
   | EFix (f, xs, body, tp) ->
     let vars, tres = pp_fn_args ctx xs tp in
@@ -191,7 +210,7 @@ let rec pp_expr (indent : string) ctx (lvl : int) : expr -> string = function
 
   | ELet (x, e1, e2) ->
     let e1' = pp_expr (indent^"  ") ctx def_lvl e1 in
-    let e2 = pp_expr (indent^"  ") ctx def_lvl e2 in
+    let e2 = pp_expr indent ctx def_lvl e2 in
     pp_at_level def_lvl lvl
       (sprintf "let %s =%s%s%s"
         (pp_context_lookup (NamedVar x) ctx)

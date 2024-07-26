@@ -114,7 +114,7 @@ let rec infer_type env e =
   | ECtor (name, body) ->
     let expected, alias, tvars = Env.lookup_ctor env name in
     let tp, eff = infer_type env body in
-    let adt_args = Subst.get_subst (Env.tvar_set env) expected tp |> List.map snd in
+    let _, adt_args = Subst.get_subst (Env.tvar_set env) expected tp in
     TADT (alias, adt_args), eff
 
   | EMatch(body, defs, tp) ->

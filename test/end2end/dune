@@ -1,3 +1,3 @@
 (executable
   (name simple_tester)
-  (libraries prototyp_lib unix str))
+  (libraries pipeline unix str))

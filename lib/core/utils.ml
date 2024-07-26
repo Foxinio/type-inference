@@ -8,6 +8,17 @@ let split_list xs n =
   in
   inner [] (xs, n)
 
+let type_name_gen i =
+  let to_ascii x = Char.code 'a' + x |> Char.chr in
+  let limit = (Char.code 'z') - (Char.code 'a') + 1 in
+  let rec inner i =
+    if i >= 0 && i < limit then to_ascii i |> String.make 1 
+    else
+      let minor = i mod limit |> inner
+      and major = i / limit |> inner in
+      major ^ minor
+  in
+  inner i
 
 (** Exception that aborts the interpreter *)
 
@@ -16,16 +27,18 @@ exception Fatal_error
 exception Internal_error
 exception Runtime_error
 
+let quit e _ =
+  raise e
 
 (** Pretty-printer of locations *)
 let string_of_pp (start_p : Lexing.position) (end_p : Lexing.position) =
   if end_p.pos_cnum - start_p.pos_cnum <= 1 then
-    Printf.sprintf "%s:%d:%d"
+    Printf.sprintf "file: %s, line:%d, char:%d"
       start_p.pos_fname
       start_p.pos_lnum
       (start_p.pos_cnum - start_p.pos_bol + 1)
   else
-    Printf.sprintf "%s:%d:%d-%d"
+    Printf.sprintf "file: %s, line:%d, char:%d-%d"
       start_p.pos_fname
       start_p.pos_lnum
       (start_p.pos_cnum - start_p.pos_bol + 1)
@@ -34,14 +47,14 @@ let string_of_pp (start_p : Lexing.position) (end_p : Lexing.position) =
 (** report an error not related to any location. *)
 let report_error_no_pos fmt =
   Printf.kfprintf
-    (fun _ -> raise Fatal_error)
+    (quit Fatal_error)
     stderr
     ("error: " ^^ fmt ^^ "\n")
 
 (** report an error related to a location between given positions. *)
 let report_error_pp start_p end_p fmt =
   Printf.kfprintf
-    (fun _ -> raise Fatal_error)
+    (quit Fatal_error)
     stderr
     ("%s: error: " ^^ fmt ^^ "\n")
     (string_of_pp start_p end_p)
@@ -52,12 +65,12 @@ let report_error (node : ('a,'b) Ast.node) fmt =
 
 let report_internal_error fmt =
   Printf.kfprintf
-    (fun _ -> raise Internal_error)
+    (quit Internal_error)
     stderr
     ("internal error: " ^^ fmt ^^ "\n")
 
 let report_runtime_error fmt =
   Printf.kfprintf
-    (fun _ -> raise Runtime_error)
+    (quit Runtime_error)
     stderr
     ("internal error: " ^^ fmt ^^ "\n")

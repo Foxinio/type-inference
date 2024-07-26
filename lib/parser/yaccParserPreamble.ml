@@ -2,7 +2,7 @@ open Core
 open Ast
 
 type 'typ def =
-  | DLet of 'typ var * 'typ expr
+  | DLet of 'typ var_def * 'typ expr
   | DType of alias * (ctor_name * 'typ) list
   | DTypeAlias of alias * 'typ
 

@@ -6,9 +6,9 @@ let x =
 	if true
 	then Inl ()
 	else Inr 42
+in
 
-let _ =
-	match x with
-	| Inl x -> 13
-	| Inr x -> x
+match x with
+| Inl x -> 13
+| Inr x -> x
 	

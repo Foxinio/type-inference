@@ -1,5 +1,7 @@
 (lang dune 3.13)
 (using menhir 3.0)
+(wrapped_executables false)
+(map_workspace_root false)
 
 (name prototyp)
 

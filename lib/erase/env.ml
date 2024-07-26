@@ -1,8 +1,5 @@
 open Ast
-open Core
-
-module VarTbl = Imast.VarTbl
-module VarMap = Imast.VarMap
+open Core.Imast
 
 type t = {
   name_map   : string VarTbl.t;
@@ -32,14 +29,20 @@ let with_name_map name_map = {
 
 (* ------------------------------------------------------------------------- *)
 
+let lookup_var_name env x =
+  match VarTbl.find_opt env.name_map x with
+  | None -> "#"^IMAstVar.to_string x
+  | Some res -> res
+
 let lookup_var env x =
-  VarMap.find x env.var_tp_map
+  match VarMap.find_opt x env.var_tp_map with
+  | None -> failwith ("Internal error: unbound variable"^lookup_var_name env x)
+  | Some tp -> tp
 
 let lookup_ctor env sysF_ctor : int * SystemF.adtvar =
-  VarMap.find sysF_ctor env.ctors
-
-let lookup_var_name env x =
-  VarTbl.find env.name_map x
+  match VarMap.find_opt sysF_ctor env.ctors with
+  | None -> failwith ("Internal error: unbound ctor"^lookup_var_name env sysF_ctor)
+  | Some res -> res
 
 (* ------------------------------------------------------------------------- *)
 

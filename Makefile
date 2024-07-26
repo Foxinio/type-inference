@@ -5,6 +5,7 @@ all: build tex
 
 build:
 	dune build
+	ln -s _build/default/bin/main.exe a.out
 
 watch:
 	dune build --watch

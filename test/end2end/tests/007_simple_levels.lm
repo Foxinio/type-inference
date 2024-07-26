@@ -1,4 +1,6 @@
-type t1 = A1 | B1
+type t1 =
+	| A1
+	| B1
 
 let map_pair p1 p2 =
 	((fst p1) (fst p2), (snd p1) (snd p2))
@@ -21,5 +23,6 @@ let f1 a1 =
 	in g2 (match a2 with
 		| A1 -> A2
 		| B1 -> B2)
+in
 
-let _ = map_pair (f1, f1) (A1, B1)
+map_pair (f1, f1) (A1, B1)

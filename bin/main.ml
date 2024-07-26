@@ -1,37 +1,7 @@
 (** The main module of a interpreter *)
 
-open Prototyp_lib
+open Pipeline
 open Core
-
-let check_invariant f p =
-  f p;
-  p
-
-let analyze = ref false
-
-let maybe_transform f =
-  if !analyze then f else Fun.id
-
-let dump pp p =
-  let str = pp p in
-  Printf.eprintf "%s\n%s\n%!" str @@ String.make 40 '#';
-  p
-
-
-let pipeline (fname : string) =
-  let _ = fname
-  |> Core_parser.parse_file
-  |> Builtin.prepend_prelude
-  |> ToImast.translate
-  |> Typing.infer
-  |> ToSystemF.tr_program
-  |> maybe_transform SystemF.transform_with_effects
-  |> maybe_transform SystemF.transform_with_folding
-  |> check_invariant SystemF.ensure_well_typed
-  |> dump SystemF.pp_program
-  |> Erase.erase_type
-  |> Eval.eval_program
-  in ()
 
 let help_msg = Printf.sprintf {|
   Usage: %s [-a|-s|-c] FILE
@@ -42,7 +12,7 @@ let help_msg = Printf.sprintf {|
 
 |} Sys.argv.(0)
 
-let _ =
+let main () =
   if Array.length Sys.argv <> 3 then
     (Printf.eprintf "%s"  help_msg;
     exit 1)
@@ -56,3 +26,11 @@ let _ =
       exit 1));
     try pipeline Sys.argv.(2) with
     | Utils.Fatal_error -> exit 1
+
+
+let _ =
+  Printexc.record_backtrace true;
+  try main () with e ->
+    let msg = Printexc.to_string e
+    and stack = Printexc.get_backtrace () in
+      Printf.eprintf "there was an error: %s\n%s\n" msg stack

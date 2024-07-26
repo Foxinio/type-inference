@@ -73,6 +73,9 @@ module PrettyPrint : sig
 
   val pp_type : (TVar.t, Type.uvar, var_type) ctx -> Type.t -> string
   val string_of_type : Type.t -> string
-end
 
+  val pp_expr_with_ctx :
+    (TVar.t, Type.uvar, var_type) ctx -> Schema.typ expr -> string
+  val pp_expr_with_tbl : string VarTbl.t -> Schema.typ expr -> string
+end
 

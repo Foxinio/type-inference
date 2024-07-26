@@ -37,14 +37,18 @@ let subst_mapping tp xs =
 
 
 let get_subst env_bound_tvars template instance =
-  let rec inner bounded mapping template instance =
-    match template, instance with
+  let rec inner bounded mapping tp1 tp2 =
+    match tp1, tp2 with
     | TUnit, TUnit | TBool, TBool | TInt, TInt | TEmpty, TEmpty -> mapping
     | TVar a, _ ->
       if TVarSet.mem a bounded then
         begin match TVarMap.find_opt a mapping with
-        | None -> TVarMap.add a instance mapping
-        | Some _ -> failwith "internal error"
+        | None -> TVarMap.add a tp2 mapping
+        | Some _ ->
+          begin match tp2 with
+          | TVar b when TVar.compare a b = 0 -> mapping
+          | _ -> Utils.report_type_missmatch template instance
+          end
         end
       else mapping
     | TForallT (a, tp1), TForallT (b, tp2) ->
@@ -62,9 +66,9 @@ let get_subst env_bound_tvars template instance =
     | TADT (a1, tps1), TADT (a2, tps2) when Core.Imast.IMAstVar.compare a1 a2 = 0 ->
       List.fold_left2 (inner bounded) mapping tps1 tps2
     | (TUnit | TBool | TInt | TEmpty | TArrow _ | TPair _ | TADT _ | TForallT _ ), _ ->
-      failwith "internal error"
+      Utils.report_type_missmatch template instance
   in
   inner env_bound_tvars TVarMap.empty template instance
-    |> TVarMap.to_list
+    |> TVarMap.to_list |> List.split
 
 

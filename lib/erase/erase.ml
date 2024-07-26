@@ -33,7 +33,7 @@ let rec tr_expr env (e : SystemF.expr) : Ast.expr * SystemF.tp =
       when s = "or" -> 
     tr_expr env (EIf(e1, EBool true, e2))
 
-  | EApp(EExtern (s, _), [e]) ->
+  | EApp(EExtern (s, _), [e]) when s = "printType" ->
     let _, tp = tr_expr env e in
     SystemF.PrettyPrinter.pp_type
       (Env.get_ctx env) tp
