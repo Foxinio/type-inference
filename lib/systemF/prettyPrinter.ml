@@ -252,7 +252,7 @@ let rec pp_expr (indent : string) ctx (lvl : int) : expr -> string = function
       (sprintf "%s;%s" e1str @@ endline indent e2str)
 
   | EType (alias, args, ctors, body) ->
-    let bodystr = pp_expr (indent^"  ") ctx def_lvl body in
+    let bodystr = pp_expr indent ctx def_lvl body in
     let alias'  = pp_context_lookup (NamedVar alias) ctx in
     let argsstr =
       let str = List.map (fun x -> pp_context_lookup (AnonVar x) ctx) args in

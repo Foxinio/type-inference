@@ -112,16 +112,17 @@ and tr_clauses env tp = function
   | [] when tp = SystemF.TEmpty -> Array.init 0 Obj.magic
   | [] -> failwith "internal error"
   | clauses ->
+    let open Core.Imast in
     let f (ctor_name, x, body) =
       let ctor_name', _ = Env.lookup_ctor env ctor_name in
       let body', _ = tr_expr env body in
       (ctor_name', x, body')
     in let rec fill_clauses acc i = function
-      | (ctor_name', _, _ as clause) :: clauses when i+1 = ctor_name' ->
+      | (ctor_name', _, _ as clause) :: clauses when i = ctor_name' ->
         fill_clauses (clause :: acc) (i+1) clauses
       | [] -> List.rev acc
       | clauses ->
-        let x = Core.Imast.IMAstVar.fresh () in
+        let x = VarTbl.fresh_var (VarTbl.gen_name ()) in
         let body = Ast.EApp(Builtin.fail "Match failure", [EUnit]) in
         fill_clauses ((i, x, body) :: acc) (i+1) clauses
     in
