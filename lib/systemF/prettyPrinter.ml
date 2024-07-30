@@ -21,9 +21,8 @@ type ('a, 'c) ctx = ('a, 'c) ctx_struct ref
 (* ========================================================================= *)
 (** Creates fresh pretty-printing context *)
 
-let pp_context () = ref {env=[]; anons=0; named=0; }
-
-let pp_context_of_seq var_seq = 
+let pp_context () =
+  let var_seq = Core.Imast.VarTbl.to_seq () in
   ref {
     env=List.of_seq var_seq |> List.map (fun (k, v) -> (NamedVar k, v));
     anons=0;
@@ -70,9 +69,13 @@ let rec pp_type ctx lvl = function
   | TVar x -> pp_context_lookup (AnonVar x) ctx
   | TADT (x, tps) -> 
     let x = pp_context_lookup (NamedVar x) ctx in
-    let tps = pp_list "," ctx 1 tps |> pp_at_level 1 (List.length tps) in
-    pp_at_level 0 lvl
-      (sprintf "%s %s" x tps)
+    let tps' = pp_list "," ctx 1 tps |> pp_at_level 1 (List.length tps) in
+    let str =
+      if List.is_empty tps then x
+      else if List.length tps = 1 then sprintf "%s %s" x tps'
+      else sprintf "%s (%s)" x tps'
+    in
+    pp_at_level 0 lvl str
   | TUnit  -> "Unit"
   | TEmpty -> "Empty"
   | TBool  -> "Bool"
@@ -99,8 +102,6 @@ and pp_list separator ctx lvl tps =
 
 let pp_type ctx = pp_type ctx 0
 
-let string_of_type = pp_type (pp_context ())
-
 (* ========================================================================= *)
 
 let endline indent str =
@@ -126,29 +127,26 @@ let get_purity xs tp =
       if Arrow.view_eff arr = EffPure
       then "p"
       else "i"
-    | _, _ -> failwith "impossible"
+    | _, _ -> failwith "internal error: expected TArrow"
   in match xs, tp with
     | _ :: xs, TArrow(arr, _, tres) -> inner arr (xs, tres)
-    | _ -> failwith "impossible"
+    | [], _ -> failwith "internal error: empty list of arguments"
+    | _, _  -> failwith "internal error: expected TArrow"
 
 let rec pp_expr (indent : string) ctx (lvl : int) : expr -> string = function
   | EUnit -> "()"
-  | EBool b when b -> "true"
-  | EBool _ -> "false"
-  | ENum n ->
-    let str = string_of_int n in
-    str
-  | EVar x ->
-    let name = pp_context_lookup (NamedVar x) ctx in
-    name
+  | EBool b -> string_of_bool b
+  | ENum n -> string_of_int n
+  | EVar x -> pp_context_lookup (NamedVar x) ctx
 
   | EFn (xs, body, tp) ->
     let vars, tres = pp_fn_args ctx xs tp in
     let tstr = pp_type ctx tres in
+    assert(not @@ List.is_empty xs);
     let purity = get_purity xs tp in
     let body_str = pp_expr (indent^"  ") ctx fun_lvl body in
     pp_at_level fun_lvl lvl
-      (sprintf "fun %s : %s ->%s%s"
+      (sprintf "fun %s : %s =>%s%s"
         (String.concat " " vars)
         tstr
         purity
@@ -302,10 +300,10 @@ and pp_ctors indent ctx ctors =
   let f (name, tp) =
     let tstr = pp_type ctx tp in
     let name = pp_context_lookup (NamedVar name) ctx in
-    sprintf "%s| %s of %s" indent name tstr
+    sprintf "| %s of %s" name tstr
   in
   let estrs = List.map f ctors in
-  let sep = "\n" in
+  let sep = "\n"^indent in
   String.concat sep estrs |> endline indent
 
 and pp_clauses indent ctx clauses =
@@ -313,10 +311,12 @@ and pp_clauses indent ctx clauses =
     let ctor_name = pp_context_lookup (NamedVar ctor) ctx in
     let var_name = pp_context_lookup (NamedVar var) ctx in
     let bodystr = pp_expr (indent^"  ") ctx app_lvl body in
-    sprintf "%s| %s %s ->%s" indent ctor_name var_name @@ endline' indent bodystr
+    sprintf "| %s %s =>%s" ctor_name var_name @@ endline' indent bodystr
   in
   let estrs = List.map f clauses in
-  let sep = "\n" in
+  let sep = "\n"^indent in
   String.concat sep estrs |> endline indent
 
-let pp_expr ctx = pp_expr "" ctx 0
+let pp_type tp = pp_type (pp_context()) tp
+
+let pp_expr e = pp_expr "" (pp_context ()) 0 e

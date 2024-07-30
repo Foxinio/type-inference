@@ -6,11 +6,9 @@ open Main
 type t
 
 val empty : t
-val with_name_map : string VarTbl.t -> t
 
 val add_var  : t -> var -> tp -> t
 val add_tvar : t -> tvar -> t * tvar
-val add_ctor : t -> var -> tp -> name -> tvar list -> t
 
 val extend_tvar : t -> tvar list -> t * tvar list
 val extend_ctors : t -> (var * tp) list -> name -> tvar list -> t
@@ -22,5 +20,5 @@ val lookup_ctor : t -> var -> tp * name * tvar list
 
 val tvar_set : t -> TVarSet.t
 
-val fresh_var : t -> var
-val get_ctx : t -> ('a, var_type) PrettyPrinter.ctx
+val fresh_var : unit -> var
+val pp_vars : t -> string

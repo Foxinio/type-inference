@@ -25,6 +25,8 @@ open Ast
 
 %%
 
+// =============================================================================
+
 expl_type_list2
 : expl_type COMMA expl_type       { [ $1 ]   }
 | expl_type COMMA expl_type_list2 { $1 :: $3 }
@@ -51,6 +53,35 @@ simpl_type
 | TYP_KW_UNIT                       { TUnit                    }
 ;
 
+// =============================================================================
+
+bar_opt
+: /* empty */ { () }
+| BAR         { () }
+;
+
+const
+: UID TYP_COLON expl_type  { ($1, $3)    }
+;
+
+const_list
+: const                { [ $1 ]   }
+| const BAR const_list { $1 :: $3 }
+;
+
+aid_list2
+: AID COMMA AID          { [$1; $3] }
+| AID COMMA aid_list2    { $1 :: $3 }
+;
+
+alias
+: LID                         { ($1, [])   }
+| LID AID                     { ($1, [$2]) }
+| LID BR_OPN aid_list2 BR_CLS { ($1, $3)   }
+;
+
+// =============================================================================
+
 id
 : LID                                   { make $1             }
 | BR_OPN LID TYP_COLON expl_type BR_CLS { make_with_typ $2 $4 }
@@ -61,21 +92,36 @@ id_list1
 | id id_list1 { $1 :: $2 }
 ;
 
-bar_opt
-: /* empty */ { () }
-| BAR         { () }
+// =============================================================================
+
+def
+: KW_LET LID EQ expr                     { make (DLet(($2, THole), $4))         }
+| KW_LET LID TYP_COLON expl_type EQ expr { make_with_typ (DLet(($2,$4), $6)) $4 }
+| KW_LET LID id_list1 EQ expr            { desugar_let_fun $2 $3 $5 THole       }
+| KW_LET LID id_list1
+  TYP_COLON expl_type EQ expr            { desugar_let_fun $2 $3 $7 $5    }
+| KW_LET KW_REC LID id_list1 EQ expr     { desugar_let_rec $3 $4 $6 THole }
+| KW_LET KW_REC LID id_list1
+  TYP_COLON expl_type EQ expr            { desugar_let_rec $3 $4 $8 $6 }
+| KW_TYPE alias EQ bar_opt const_list    { make (DType ($2, $5))       }
+| KW_TYPE alias EQ expl_type             { make (DTypeAlias ($2, $4))  }
 ;
 
+def_list1
+: def           { [ $1 ] }
+| def def_list1 { $1 :: $2 }
+;
+
+// =============================================================================
+
 expr
-: def_list1 KW_IN       expr      { desugar_defs $1 $3         }
+: def_list1 KW_IN expr            { desugar_defs $1 $3         }
 | KW_FN id_list1 ARROW2 expr      { desugar_fn $2 $4 THole     }
 | KW_FIX LID id_list1 ARROW2 expr { desugar_fix $2 $3 $5 THole }
-| KW_MATCH expr KW_WITH
-  bar_opt clauses KW_END
-    { make (EMatch ($2, $5)) }
 | KW_IF expr KW_THEN expr KW_ELSE expr
     { make (EIf($2, $4, $6)) }
 | expr_app SEMICOLON expr { make (ESeq($1, $3)) }
+| match_expr              { $1 }
 | expr_app                { $1 }
 ;
 
@@ -98,8 +144,16 @@ expr_simple
 | KW_FALSE                      { make (EBool false)   }
 ;
 
+// =============================================================================
+
+match_expr
+: KW_MATCH expr KW_WITH bar_opt clauses KW_END
+  { make (EMatch ($2, $5)) }
+;
+
+
 clause
-: UID LID ARROW2 expr { ($1, ($2, THole), $4) }
+  : UID LID ARROW2 expr { ($1, ($2, THole), make $4.data) }
 ;
 
 clauses
@@ -107,43 +161,7 @@ clauses
 | clause BAR clauses { $1 :: $3 }
 ;
 
-const
-: UID TYP_COLON expl_type  { ($1, $3) }
-;
-
-const_list
-: const                { [ $1 ]   }
-| const BAR const_list { $1 :: $3 }
-;
-
-aid_list2
-: AID COMMA AID          { [$1; $3] }
-| AID COMMA aid_list2    { $1 :: $3 }
-;
-
-alias
-: LID                         { ($1, [])   }
-| LID AID                     { ($1, [$2]) }
-| LID BR_OPN aid_list2 BR_CLS { ($1, $3)   }
-;
-
-def
-: KW_LET LID EQ expr                     { make (DLet(($2, THole), $4))         }
-| KW_LET LID TYP_COLON expl_type EQ expr { make_with_typ (DLet(($2,$4), $6)) $4 }
-| KW_LET LID id_list1 EQ expr            { desugar_let_fun $2 $3 $5 THole       }
-| KW_LET LID id_list1
-  TYP_COLON expl_type EQ expr            { desugar_let_fun $2 $3 $7 $5    }
-| KW_LET KW_REC LID id_list1 EQ expr     { desugar_let_rec $3 $4 $6 THole }
-| KW_LET KW_REC LID id_list1
-  TYP_COLON expl_type EQ expr            { desugar_let_rec $3 $4 $8 $6 }
-| KW_TYPE alias EQ bar_opt const_list    { make (DType ($2, $5))       }
-| KW_TYPE alias EQ expl_type             { make (DTypeAlias ($2, $4))  }
-;
-
-def_list1
-: def           { [ $1 ] }
-| def def_list1 { $1 :: $2 }
-;
+// =============================================================================
 
 file
 : expr EOF { $1 }

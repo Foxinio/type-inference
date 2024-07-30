@@ -1,6 +1,7 @@
-open Core
+open Utils
 open Main
 open Subst
+open Core
 
 let refresh_tvars = EnsureWellTyped.check_well_scoped
 
@@ -24,7 +25,7 @@ let rec mark_unfolded env = function
   | TArrow(_, _, (TArrow (_,_,_) as tres)) -> mark_unfolded env tres
   | TArrow(arr, _, _) -> Arrow.set_unfolded arr
   | tp -> Utils.report_internal_error "Expected TArrow: %s"
-    (PrettyPrinter.pp_type (Env.get_ctx env) tp)
+    (PrettyPrinter.pp_type tp)
 
 let rec fill_unfolds env e =
   let open Effect in
@@ -175,22 +176,25 @@ let rec split_arrow body xs tp =
     match xs, tp with
     | x :: xs, TArrow(arr, _, tp2) when Arrow.view_fold arr = FldFolded ->
       inner (x :: acc) xs tp2
-    | [], tp -> List.rev acc, body
-    | xs, tp ->
+    | [], _ -> List.rev acc, body
+    | [x], _ ->
+      List.rev (x :: acc), body
+    | x :: xs, TArrow(_, _, tp) ->
       let xs, body = split_arrow body xs tp in
       let body' = EFn (xs, body, tp) in
-      List.rev acc, body'
+      List.rev (x :: acc), body'
+    | _ :: _, _ -> raise (Invalid_argument "split_arrow expects an arrow")
   in inner [] xs tp
 
 let destruct_tarrow = function
   | TArrow(arr, targ, tres) -> arr, targ, tres
   | _ -> failwith "internal error"
 
-let make_wrapper env e' (eff : Effect.t) =
+let make_wrapper e' (eff : Effect.t) =
   match eff with
   | EffPure -> Fun.id, e'
   | EffImpure ->
-    let x' = Env.fresh_var env in
+    let x' = Env.fresh_var () in
     (fun e2 -> ELet(x', e', e2)), EVar x'
 
 let rec unfold_app e' = function
@@ -316,12 +320,12 @@ and transform_app env e1' es tp eff =
   let curring es tp eff =
     let rec generate_args args xs = function
       | TArrow(arr, _, tres) when Arrow.view_fold arr = FldFolded ->
-        let x = Env.fresh_var env in
+        let x = Env.fresh_var () in
         generate_args (EVar x :: args) (x :: xs) tres
       | tp ->
       let rec generate_lets lets args' eff = function
         | (e, eff') :: rest when eff' = Effect.EffImpure ->
-          let x = Env.fresh_var env in
+          let x = Env.fresh_var () in
           generate_lets ((x, e) ::lets) (EVar x::args')
             (Effect.join eff eff') rest
         | (e, _) :: rest ->
@@ -346,7 +350,7 @@ and transform_app env e1' es tp eff =
 
     | [e], TArrow(arr, targ, tres) ->
       let e', eff' = coerse_argument env e targ in
-      let e1wrapper, e1'' = make_wrapper env e1' eff in
+      let e1wrapper, e1'' = make_wrapper e1' eff in
       let lets, args, xs, eff'' = curring ((e', eff') :: acc) tp eff in
       let curried = EFn(xs, EApp(e1'', args), tres) in
       let lets = List.fold_left
@@ -371,7 +375,7 @@ and transform_app env e1' es tp eff =
 and coerse_argument env e expected =
   let e', actual, eff = transform_expr env e in
   if arg_length actual = arg_length expected then e', eff else
-  let ewrapper, e' = make_wrapper env e' eff in
+  let ewrapper, e' = make_wrapper e' eff in
   let rec inner1 e' tret =
     let rec inner2 xs eff vars actual expected =
       let arr1, _, actual   = destruct_tarrow actual in
@@ -381,28 +385,28 @@ and coerse_argument env e expected =
       (* e: (_, ...->)-> *)
       (* e': _, ...->    *)
       | FldFolded, FldFolded ->
-        let x = Env.fresh_var env in
+        let x = Env.fresh_var () in
         let eff' = Effect.join eff @@ Arrow.view_eff arr1 in
         inner2 (x :: xs) eff' (minor_append (EVar x) vars) actual expected
 
       (* e: (_, ...->)-> *)
       (* e': _->...->    *)
       | FldUnfolded, FldFolded ->
-        let x = Env.fresh_var env in
+        let x = Env.fresh_var () in
         let eff' = Effect.join eff @@ Arrow.view_eff arr1 in
         inner2 (x :: xs) eff' ([(EVar x)] :: vars) actual expected
 
       (* e: (_->...->)-> *)
       (* e': _, ...->    *)
       | FldFolded, FldUnfolded ->
-        let x = Env.fresh_var env in
+        let x = Env.fresh_var () in
         let eff' = Effect.join eff @@ Arrow.view_eff arr1 in
         let xs, vars = x :: xs, minor_append (EVar x) vars in
         if eff' = EffPure then
           let body = inner1 e' expected vars actual expected in
           EFn(List.rev xs, body, tret)
         else
-          let x' = Env.fresh_var env in
+          let x' = Env.fresh_var () in
           let body = inner1 (EVar x') expected [List.hd vars] actual expected in
           let body' = ELet(x', unfold_app e' (List.rev @@ List.tl vars), body) in
           EFn(List.rev xs, body', tret)
@@ -410,7 +414,7 @@ and coerse_argument env e expected =
       (* e: (_->...->)-> *)
       (* e': _->...->    *)
       | FldUnfolded, FldUnfolded ->
-        let x = Env.fresh_var env in
+        let x = Env.fresh_var () in
         let _ = Effect.join eff @@ Arrow.view_eff arr1 in
         let xs, vars = x :: xs, minor_append (EVar x) vars in
         EFn(List.rev xs, unfold_app e' (List.rev vars), tret)
@@ -420,8 +424,7 @@ and coerse_argument env e expected =
   inner1 e' expected [] actual expected |> ewrapper, eff
 
 
-let transform_with_folding (p, env) =
-  let start_env = Env.with_name_map env in
-  let _ = fill_unfolds start_env p in
-  let p, _, _ = transform_expr start_env p in
-  p, env
+let transform_with_folding p =
+  let _ = fill_unfolds Env.empty p in
+  let p, _, _ = transform_expr Env.empty p in
+  p

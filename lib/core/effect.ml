@@ -18,3 +18,7 @@ let join a b =
 
 let pure = EffPure
 let not_pure = EffImpure
+
+let to_string = function
+  | EffPure -> "pure"
+  | EffImpure -> "impure"

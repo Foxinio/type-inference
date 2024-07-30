@@ -90,7 +90,6 @@ module Env : sig
 
   val add_var  : t -> var -> tp -> t
   val add_tvar : t -> tvar -> t * tvar
-  val add_ctor : t -> var -> tp -> name -> tvar list -> t
 
   val extend_tvar : t -> tvar list -> t * tvar list
   val extend_ctors : t -> (var * tp) list -> name -> tvar list -> t
@@ -103,7 +102,7 @@ module Env : sig
   val tvar_set : t -> TVarSet.t
 end
 
-type program = expr * string Imast.VarTbl.t
+type program = expr
 
 val infer_type : Env.t -> expr -> tp * Effect.t
 val ensure_well_typed : program -> unit
@@ -117,14 +116,8 @@ val supertype  : tp -> tp -> bool
 val pp_program : program -> string
 
 module PrettyPrinter : sig
-  type ('a, 'c) ctx
+  val pp_type : tp -> string
 
-  val pp_context : unit -> ('a, 'c) ctx
-  val pp_context_of_seq : ('a * string) Seq.t -> ('c, 'a) ctx
-
-  val pp_type : (TVar.t, var) ctx -> tp -> string
-  val string_of_type : tp -> string
-
-  val pp_expr : (TVar.t, var) ctx -> expr -> string
+  val pp_expr : expr -> string
 end
 

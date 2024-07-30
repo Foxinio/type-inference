@@ -7,7 +7,6 @@ type t = {
   gamma: Schema.typ VarMap.t;
   ctors: (Schema.typ * Schema.typ) VarMap.t;
   delta: Schema.typ VarMap.t;
-  var_name: string VarTbl.t;
   level: Level.t;
 }
 
@@ -15,12 +14,8 @@ let empty = {
   gamma=VarMap.empty;
   ctors=VarMap.empty;
   delta=VarMap.empty;
-  var_name=VarTbl.create 11;
   level=Level.starting;
 }
-let of_var_names var_name =
-  { empty with var_name }
-
 
 (* uvar levels *)
 let increase_level_minor ({ level;_} as env) =
@@ -89,11 +84,26 @@ let extend_delta_of_list ({delta;_} as env) lst =
 
 let lookup_delta {delta;_} name = VarMap.find_opt name delta
 
-(* var names *)
-
-let extend_var_name {var_name;_} x name = VarTbl.add var_name x name
-
-let lookup_var_name ?(default="<unknown>") {var_name;_} x = VarTbl.find_opt var_name x |> Option.value ~default
-
-let get_ctx {var_name;_} =
-  PrettyPrinter.pp_context_of_seq (VarTbl.to_seq var_name)
+let pp_env { gamma; ctors; delta; level} =
+  let string_of_var var = Printf.sprintf "{%s;%s}"
+    (IMAstVar.to_string var) (VarTbl.find var) in
+  let string_of_typ typ =
+    Schema.get_template typ |> PrettyPrinter.pp_type in
+  let str_gamma (var, typ) =
+      Printf.sprintf "(%s : %s)" (string_of_var var) (string_of_typ typ)
+  and str_ctor (var, (typ, adt_typ)) =
+    Printf.sprintf
+      "(%s : %s ~> %s)"
+      (string_of_var var)
+      (string_of_typ typ)
+      (string_of_typ adt_typ)
+  in
+  let gamma_str = VarMap.to_seq gamma
+    |> Seq.map str_gamma |> List.of_seq |> String.concat ", " in
+  let ctors_str = VarMap.to_seq ctors
+    |> Seq.map str_ctor |> List.of_seq |> String.concat ", " in
+  let delta_str = VarMap.to_seq delta
+    |> Seq.map str_gamma |> List.of_seq |> String.concat ", " in
+  Printf.sprintf
+    "\nGamma: %s\nCtors: %s\nDelta: %s\n"
+    gamma_str ctors_str delta_str

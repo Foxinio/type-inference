@@ -8,12 +8,33 @@ module VarMap = IMAstVar.MakeMap()
 module VarSet = IMAstVar.MakeSet()
 module VarTbl
 : sig
-  include module type of IMAstVar.MakeHashtbl()
+  type t
   val gen_name : unit -> string
-end = struct
-  include IMAstVar.MakeHashtbl()
-  let counter = ref 0
 
+  val find : var_type -> string
+  val add  : var_type -> string -> unit
+
+  val to_seq : unit -> (var_type*string) Seq.t
+
+  val fresh_var : string -> var_type
+end = struct
+  module VarTbl = IMAstVar.MakeHashtbl()
+  type t = string VarTbl.t
+
+  let instance : t = VarTbl.create 411
+
+  let find = VarTbl.find instance
+
+  let add = VarTbl.add instance
+
+  let to_seq () = VarTbl.to_seq instance
+
+  let fresh_var x =
+    let v = IMAstVar.fresh () in
+    add v x;
+    v
+
+  let counter = ref 0
   let gen_name () =
     let limit = (Char.code 'z') - (Char.code 'a') + 1 in
     let rec inner i =
@@ -28,5 +49,5 @@ end = struct
     name
 end
 
-type program = expl_type expr * string VarTbl.t
+type program = expl_type expr
 

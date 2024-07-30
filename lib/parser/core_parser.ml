@@ -35,5 +35,6 @@ let parse_file fname =
       Utils.report_error_pp
         lexbuf.Lexing.lex_start_p
         lexbuf.Lexing.lex_curr_p
-        "syntax error"
+        "syntax error: %s"
+        (Lexing.lexeme lexbuf)
   )

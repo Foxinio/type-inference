@@ -52,7 +52,7 @@ and ctor_def = name * tp
 and alias = name * tvar list
 and clause = name * var * expr
 
-type program = expr * string VarTbl.t
+type program = expr
 
 module VarMap  = IMAstVar.MakeMap()
 module TVarMap = Map.Make(TVar)

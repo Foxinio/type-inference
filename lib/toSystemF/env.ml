@@ -5,18 +5,12 @@ open Typing
 type t = {
   tvar_map : SystemF.tvar TVarMap.t;
   var_map  : SystemF.tp VarMap.t;
-  name_map : string VarTbl.t;
 }
 
 let empty = {
   tvar_map = TVarMap.empty;
   var_map  = VarMap.empty;
-  name_map = VarTbl.create 11;
 }
-
-let with_name_map name_map =
-  { empty with name_map }
-
 
 let add_tvar env (a : TVar.t) =
   let b = SystemF.TVar.fresh () in
@@ -42,7 +36,3 @@ let lookup_var env x =
   | None -> failwith "Internal error: unbound variable"
   | Some(SystemF.TForallT(args, _) as tp) -> tp, args
   | Some tp -> tp, []
-
-let get_ctx env =
-  SystemF.PrettyPrinter.pp_context_of_seq (VarTbl.to_seq env.name_map)
-

@@ -8,12 +8,6 @@ module Utils = Core.Utils
 (* ========================================================================= *)
 (* Type inference *)
 
-let unwrap node env var opt =
-  match opt with
-  | Some t -> t
-  | None ->
-    let name = Env.lookup_var_name env var in
-    Utils.report_error node "Undefined variable: %s" name
 
 let make_mono tp eff =
   Schema.typ_mono tp, eff
@@ -21,10 +15,12 @@ let make_mono tp eff =
 let get_tp ({typ;_} : Schema.typ expr) =
   Schema.get_template typ
 
-let is_value (e : 'a expr) =
+let rec is_value (e : 'a expr) =
   match e.data with
   | EUnit | EBool _ | ENum _ | EVar _ | EExtern _
-  | EFn _ | EFix _ | EPair _ | ECtor _ -> true
+  | EFn _ | EFix _  | ECtor _ -> true
+  | EPair (e1, e2) ->
+    is_value e1 && is_value e2
   | EApp (_, _) | ELet (_, _, _) | EFst _ | ESnd _ | EIf (_, _, _)
   | ESeq (_, _) | ETypeAlias (_, _, _) | EType (_, _, _) | EMatch (_, _) ->
     false
@@ -57,14 +53,14 @@ and convert_type node env explicit_type : Type.t =
     else
       Utils.report_error node
         "Alias used without parameters: %s"
-        (Env.lookup_var_name env name)
+        (VarTbl.find name)
   | Imast.TAlias (name, tps) ->
     let typ = Env.lookup_delta env name |> unwrap name in
     let set = Schema.get_arguments typ in
     if Type.TVarSet.is_empty set then
       Utils.report_error node
         "Alias used without parameters: %s"
-        (Env.lookup_var_name env name)
+        (VarTbl.find name)
     else
       let mapping = List.map (convert_type node env) tps
         |> List.to_seq
@@ -235,23 +231,21 @@ and infer_and_check_type env e expected =
     e'
   with
   | Unify.Cannot_unify ->
-    let ctx = Env.get_ctx env in
     Utils.report_error e
       "This expression has type %s, but an expression was expected of type %s."
-      (pp_type ctx @@ get_tp e')
-      (pp_type ctx expected)
+      (pp_type @@ get_tp e')
+      (pp_type expected)
   | Type.Levels_difference (adt, adtlvl, uvarlvl) ->
     Utils.report_error e
       "Levels difference [%s>>%s]: %s escapes scope."
       (Type.Level.to_string adtlvl)
       (Type.Level.to_string uvarlvl)
-      (Env.lookup_var_name env adt)
+      (VarTbl.find adt)
 
-type program = Schema.typ Imast.expr * string Imast.VarTbl.t
+type program = Schema.typ Imast.expr
 
-let infer ((p, env) : Imast.program) : program =
-  let inner_env = Env.of_var_names env in
-  let data, typ = infer_type inner_env p in
+let infer (p : Imast.program) : program =
+  let data, typ = infer_type Env.empty p in
   (* should be a better way to return generalized type *)
   let typ = Schema.generalize Type.Level.starting typ in
-  { p with data; typ }, env
+  { p with data; typ }

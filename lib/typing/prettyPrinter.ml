@@ -16,13 +16,10 @@ type ('a, 'b, 'c) ctx_struct = {
   named: int;
 }
 
-type ('a, 'b, 'c) ctx = ('a, 'b, 'c) ctx_struct ref
-
 (* ========================================================================== *)
 (** Creates fresh pretty-printing context *)
-let pp_context () = ref {env=[]; uvars=0; anons=0; named=0; }
-
-let pp_context_of_seq var_seq = 
+let pp_context () =
+  let var_seq = Core.Imast.VarTbl.to_seq () in
   ref {
     env=List.of_seq var_seq |> List.map (fun (k, v) -> (NamedVar k, v));
     uvars=0; anons=0; named=0; }
@@ -90,22 +87,28 @@ let rec pp_type ctx lvl tp =
     | [] -> "Unit"
   in Type.view tp |> matcher lvl
 
-let pp_type ctx = pp_type ctx 0
-
-let string_of_type = pp_type (pp_context ())
+let pp_type = pp_type (pp_context ()) 0
 
 (* ========================================================================== *)
 (** PrettyPrint expression *)
 
-let pp_expr_with_ctx ctx e =
+let pp_expr e =
+  let ctx = pp_context () in
   let string_of_var x = pp_context_lookup (NamedVar x) ctx in
-  let string_of_type tp = pp_type ctx @@ Schema.get_template tp in
+  let string_of_type tp = pp_type @@ Schema.get_template tp in
   Core.Imast.string_of_expr e string_of_var string_of_type
 
-let pp_expr_with_tbl tbl e =
-  let open Core.Imast in
-  let string_of_var x = VarTbl.find tbl x in
-  let string_of_type tp = pp_type (pp_context_of_seq (VarTbl.to_seq tbl))
-    @@ Schema.get_template tp in
-  string_of_expr e string_of_var string_of_type
 
+let pp_ctx () =
+  let open Core.Imast in
+  let { env; uvars; anons; named; } = !(pp_context ()) in
+  let f (var, str) =
+    (match var with
+      | NamedVar x -> Printf.sprintf "%s : %s" (IMAstVar.to_string x) str
+      | AnonVar x -> Printf.sprintf "'%s : %s" (TVar.to_string x) str
+      | UVar uv -> Printf.sprintf "?%s : %s" (Type.string_of_uvar uv) str
+    ) |> fun str -> "("^str^")"
+  in
+  List.map f env
+  |> String.concat " "
+  |> fun str -> "["^str^"]"

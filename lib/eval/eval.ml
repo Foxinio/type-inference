@@ -12,45 +12,34 @@ module Env : sig
 
   val lookup : t -> var -> value
 
-  val with_name_map : string Core.Imast.VarTbl.t -> t
-
   val capture : t -> value Core.Imast.VarMap.t
 end = struct
   open Core.Imast
 
   type t = {
     vmap : value VarMap.t;
-    name_map : string VarTbl.t;
   }
 
   let empty = {
     vmap = VarMap.empty;
-    name_map = VarTbl.create 11;
   }
 
-  let with_name_map tbl =
-    { empty with name_map = tbl }
-
   let add env x v =
-    { env with vmap=VarMap.add x v env.vmap }
+    { vmap=VarMap.add x v env.vmap }
 
   let extend env xs vs =
     let f env x v = VarMap.add x v env in
     try
-      { env with vmap=List.fold_left2 f env.vmap xs vs }
+      { vmap=List.fold_left2 f env.vmap xs vs }
     with
       | Invalid_argument _ ->
         Core.Utils.report_runtime_error "coerssion done incorrectly,
       function requires different amount of arguments than reveived"
 
-
-  let lookup_name {name_map;_} x =
-    VarTbl.find name_map x
-
   let lookup env x =
     match VarMap.find_opt x env.vmap with
     | None   -> failwith ("runtime error: unbound variable "
-      ^ lookup_name env x)
+      ^ VarTbl.find x)
     | Some v -> v
 
   let capture env = env.vmap
@@ -120,6 +109,5 @@ let rec pp_value v =
   | VADT _ -> "<abstr>"
 
 
-let eval_program (p, env) =
-  let env = Env.with_name_map env in
-  eval env p |> pp_value |> print_endline
+let eval_program p =
+  eval Env.empty p |> pp_value |> print_endline

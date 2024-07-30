@@ -12,9 +12,11 @@ let assert_subtype tp1 tp2 =
   if Order.subtype tp1 tp2 then () else
   Utils.report_internal_error "At checking well-scoped type subtyping, failed"
 
-let assert_subeffect eff1 eff2 =
+let assert_subeffect e eff1 eff2 =
   if Effect.compare eff1 eff2 <= 0 then () else
-  Utils.report_internal_error "At checking well-scoped effect subeffecting, failed"
+  Utils.report_internal_error ("At checking well-scoped effect subeffecting"
+    ^^ ", failed. Expected %s, Actual %s in %s")
+    (Effect.to_string eff2) (Effect.to_string eff1) (PrettyPrinter.pp_expr e)
 
 (** Checks if type is well-scoped, and refresh its type variables according to
     the environment *)
@@ -146,7 +148,7 @@ and check_type env e tp =
 and check_type_and_effect env e tp eff =
   let tp', eff' = infer_type env e in
   assert_subtype tp' tp;
-  assert_subeffect eff' eff
+  assert_subeffect e eff' eff
 
 
 (*
@@ -208,8 +210,8 @@ and check_app_correctness env args tp eff1 =
 
   in inner1 args tp eff1
 
-let ensure_well_typed (p, map) =
-  let _, _ = infer_type (Env.with_name_map map) p in
+let ensure_well_typed p =
+  let _, _ = infer_type Env.empty p in
   ()
 
 

@@ -34,11 +34,15 @@ let rec unify_subtypes env tp1 tp2 =
     unify_subtypes env tp1a tp2a;
     unify_subtypes env tp1b tp2b
 
+  | TADT (x, args1), TADT (y, args2) when IMAstVar.compare x y = 0 ->
+    assert (List.length args1 = List.length args2);
+    List.iter2 (unify_eqtype env) args1 args2
+
   | (TUnit | TEmpty | TBool | TInt | TVar _  | TADT (_, _)
     | TArrow (_, _, _) | TPair(_, _) | TForallT (_, _)), _ ->
-    Utils.report_type_missmatch ~env tp1 tp2
+    Utils.report_type_missmatch tp1 tp2
 
-let unify_eqtype env tp1 tp2 =
+and unify_eqtype env tp1 tp2 =
   unify_subtypes env tp1 tp2;
   unify_subtypes env tp2 tp1
 
@@ -55,139 +59,131 @@ let extend_var env xs tp =
     inner (Env.add_var env x tp1) xs tp2 arr
   | _ -> failwith "internal error: expected TArrow"
 
-let rec fill_effects env e =
+
+let rec fill_effects env e arr =
   let open Effect in
   match e with
-  | EUnit   -> TUnit, EffPure
-  | EBool _ -> TBool, EffPure
-  | ENum _  -> TInt, EffPure
-  | EVar x  -> Env.lookup_var env x, EffPure
+  | EUnit   -> TUnit
+  | EBool _ -> TBool
+  | ENum _  -> TInt
+  | EVar x  -> Env.lookup_var env x
 
   | EFn (args, body, tp) ->
     let tp' = refresh_tvars env tp in
-    let tres, env, arr = extend_var env args tp' in
-    let eff = check_type env body tres in
-    if eff = EffImpure then Arrow.set_impure arr;
-    tp', EffPure
+    let tres, env, arr' = extend_var env args tp' in
+    check_type env body tres arr';
+    tp'
 
   | EFix (f, args, body, tp) ->
     let tp' = refresh_tvars env tp in
     let env = Env.add_var env f tp' in
-    let tres, env, arr = extend_var env args tp' in
-    Arrow.set_impure arr;
-    let _ = check_type env body tres in
-    tp', EffPure
+    let tres, env, arr' = extend_var env args tp' in
+    Arrow.set_impure arr';
+    check_type env body tres arr';
+    tp'
 
   | EApp (e1, es) ->
-    let tp1, eff = fill_effects env e1 in
-    let tres, eff = fill_effects_in_app env es tp1 eff in
-    tres, eff
+    let tp1 = fill_effects env e1 arr in
+    Printf.eprintf "Calling fill_effects_in_app on %s\n" (PrettyPrinter.pp_expr e);
+    assert(not @@ List.is_empty es);
+    fill_effects_in_app env es tp1 arr
 
   | ETFn(a, body) ->
     let env, b = Env.extend_tvar env a in
-    let tp, eff = fill_effects env body in
-    TForallT(b, tp), eff
+    let tp = fill_effects env body arr in
+    TForallT(b, tp)
 
   | ETApp(e, tps) ->
-    begin match fill_effects env e with
-    | TForallT(args, body), eff when List.length args = List.length tps ->
+    begin match fill_effects env e arr with
+    | TForallT(args, body) when List.length args = List.length tps ->
       let tps = List.map (refresh_tvars env) tps in
-      subst_list body args tps, eff
-    | actual, _ -> Utils.report_unexpected_type ~env actual "TForallT"
+      subst_list body args tps
+    | actual -> Utils.report_unexpected_type actual "TForallT"
     end
 
   | ELet(x, e1, e2) ->
-    let tp1, eff1 = fill_effects env e1 in
+    let tp1 = fill_effects env e1 arr in
     let env = Env.add_var env x tp1 in
-    let tp2, eff2 = fill_effects env e2 in
-    tp2, Effect.join eff1 eff2
+    let tp2 = fill_effects env e2 arr in
+    tp2
 
   | EExtern(_, tp) ->
-    refresh_tvars env tp, EffPure
+    refresh_tvars env tp
 
   | EPair(e1, e2) ->
-    let tp1, eff1 = fill_effects env e1 in
-    let tp2, eff2 = fill_effects env e2 in
-    TPair(tp1, tp2), Effect.join eff1 eff2
+    let tp1 = fill_effects env e1 arr in
+    let tp2 = fill_effects env e2 arr in
+    TPair(tp1, tp2)
 
   | EFst e ->
-    begin match fill_effects env e with
-    | TPair (tp1, _), eff -> tp1, eff
-    | actual, _ -> Utils.report_unexpected_type ~env actual "TPair"
+    begin match fill_effects env e arr with
+    | TPair (tp1, _) -> tp1
+    | actual -> Utils.report_unexpected_type actual "TPair"
     end
 
   | ESnd e ->
-    begin match fill_effects env e with
-    | TPair(_, tp2), eff -> tp2, eff
-    | actual, _ -> Utils.report_unexpected_type ~env actual "TPair"
+    begin match fill_effects env e arr with
+    | TPair(_, tp2) -> tp2
+    | actual -> Utils.report_unexpected_type actual "TPair"
     end
 
   | EIf(e1, e2, e3) ->
-    let eff1 = check_type env e1 TBool in
-    let tp2, eff2 = fill_effects env e2 in
-    let tp3, eff3 = fill_effects env e3 in
+    check_type env e1 TBool arr;
+    let tp2 = fill_effects env e2 arr in
+    let tp3 = fill_effects env e3 arr in
     unify_eqtype env tp2 tp3;
-    tp2, Effect.join eff1 (Effect.join eff2 eff3)
+    tp2
 
   | ESeq(e1, e2) ->
-    let eff1 = check_type env e1 TUnit in
-    let tp, eff2 = fill_effects env e2 in
-    tp, Effect.join eff1 eff2
+    check_type env e1 TUnit arr;
+    fill_effects env e2 arr
 
   | EType(alias, tvars, ctor_defs, body) ->
     let env', tvars = Env.extend_tvar env tvars in
     let env = Env.extend_ctors env' ctor_defs alias tvars in
-    fill_effects env body
+    fill_effects env body arr
 
   | ECtor (name, body) ->
     let expected, alias, tvars = Env.lookup_ctor env name in
-    let tp, eff = fill_effects env body in
+    let tp = fill_effects env body arr in
     let _, adt_args = Subst.get_subst (Env.tvar_set env) expected tp in
-    TADT (alias, adt_args), eff
+    TADT (alias, adt_args)
 
   | EMatch(body, defs, tp) ->
     let tp' = refresh_tvars env tp in
-    begin match fill_effects env body with
-    | TADT(alias, args), _ ->
+    begin match fill_effects env body arr with
+    | TADT(alias, args) ->
       let f (ctor, x, e) =
         let expected, alias', tvars = Env.lookup_ctor env ctor in
         assert (IMAstVar.compare alias alias' = 0);
         let substituted = Subst.subst_list expected tvars args in
         let env = Env.add_var env x substituted in
-        let _ = check_type env e tp' in
-        ()
+        check_type env e tp' arr
       in
       List.iter f defs;
-      tp', EffImpure
-    | TEmpty, eff1 ->
+      Arrow.set_impure arr;
+      tp'
+    | TEmpty ->
       assert(List.length defs = 0);
-      tp', eff1
-    | actual, _ -> Utils.report_unexpected_type ~env actual "TADT or TEmpty"
+      tp'
+    | actual -> Utils.report_unexpected_type actual "TADT or TEmpty"
     end
 
-and check_type env e tp =
-  let tp', eff' = fill_effects env e in
-  unify_subtypes env tp' tp;
-  eff'
+and check_type env e tp arr =
+  let tp' = fill_effects env e arr in
+  unify_subtypes env tp' tp
 
-and fill_effects_in_app env args tp eff1 =
-  let rec inner args tp eff =
+and fill_effects_in_app env args tp arr =
+  let rec inner args tp arr =
     match args, tp with
-    | [], tres -> tres, eff
-    | e :: args, TArrow(arr, targ, tres) ->
-      let targ', eff' = fill_effects env e in
+    | [], tres -> tres
+    | e :: args, TArrow(arr', targ, tres) ->
+      let targ' = fill_effects env e arr in
       unify_subtypes env targ' targ;
-      let eff' = Effect.join eff' @@ Arrow.view_eff arr in
-      inner args tres (Effect.join eff eff')
+      Arrow.unify_effect arr' arr;
+      inner args tres arr
     | _ :: _, _ -> Utils.report_too_many_arguments ()
-  in
-  match args, tp with
-  | e :: args, TArrow(arr, targ, tres) ->
-    let targ', eff' = fill_effects env e in
-    unify_subtypes env targ' targ;
-    let eff' = Effect.join eff' @@ Arrow.view_eff arr in
-    inner args tres eff'
-  |  _ -> Utils.report_too_many_arguments ()
+  in inner args tp arr
 
 (* ========================================================================= *)
 (* Transformation *)
@@ -248,7 +244,7 @@ let rec transform_expr env e : expr * tp * Effect.t =
       ETApp (e', tps),
       subst_list body args tps,
       eff
-    | _, actual, _ -> Utils.report_unexpected_type ~env actual "TForallT"
+    | _, actual, _ -> Utils.report_unexpected_type actual "TForallT"
     end
 
   | ELet (x, e1, e2) ->
@@ -266,14 +262,14 @@ let rec transform_expr env e : expr * tp * Effect.t =
     begin match transform_expr env e with
     | e', TPair (tp1, _), eff ->
       EFst e', tp1, eff
-    | _, actual, _ -> Utils.report_unexpected_type ~env actual "TPair"
+    | _, actual, _ -> Utils.report_unexpected_type actual "TPair"
     end
 
   | ESnd e ->
     begin match transform_expr env e with
     | e', TPair (_, tp2), eff ->
       ESnd e', tp2, eff
-    | _, actual, _ -> Utils.report_unexpected_type ~env actual "TPair"
+    | _, actual, _ -> Utils.report_unexpected_type actual "TPair"
     end
 
   | EIf (e1, e2, e3) ->
@@ -316,7 +312,7 @@ let rec transform_expr env e : expr * tp * Effect.t =
     | TEmpty ->
       assert(List.length clauses = 0);
       []
-    | actual -> Utils.report_unexpected_type ~env actual "TADT or TEmpty"
+    | actual -> Utils.report_unexpected_type actual "TADT or TEmpty"
     in EMatch (body', clauses', tp), tp, EffImpure
 
 (** Setup application to match conditions presented in EnsureWellTyped
@@ -342,7 +338,7 @@ and transform_app env (e1', tp1, eff1) es' =
     | (e', eff') :: es', TArrow(_, _, tres) ->
       e', es', tres, Effect.join eff eff'
     | [], _ -> failwith "impossible"
-    | _, actual -> Utils.report_unexpected_type ~env actual "TArrow"
+    | _, actual -> Utils.report_unexpected_type actual "TArrow"
 
   and inner3 acc es' tp =
     match es', tp with
@@ -364,8 +360,7 @@ and transform_app env (e1', tp1, eff1) es' =
     if List.is_empty rest then res
     else transform_app env res rest
 
-let transform_with_effects (p, env) =
-  let start_env = Env.with_name_map env in
-  let _ = fill_effects start_env p in
-  let p, _, _ = transform_expr start_env p in
-  p, env
+let transform_with_effects p =
+  let _ = fill_effects Env.empty p (Arrow.fresh ()) in
+  let p, _, _ = transform_expr Env.empty p in
+  p

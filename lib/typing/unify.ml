@@ -9,15 +9,6 @@ open Type
 
 exception Cannot_unify
 
-let unwrap node env var opt =
-  let var_name env var =
-      Env.lookup_var_name env var in
-  match opt with
-  | Some t -> t
-  | None ->
-    let name = var_name env var in
-    Utils.report_error node "Undefined variable: %s" name
-
 let contains_uvar env x tp =
   let helper default init t =
     match Type.view t with

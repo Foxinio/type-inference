@@ -10,6 +10,8 @@ val view : uvar -> Effect.t * Folding.t
 
 val set_unfolded : uvar -> unit
 val set_impure : uvar -> unit
+
+val unify_effect : uvar -> uvar -> unit
 val unify_uvar : uvar -> uvar -> unit
 
 val is_impure : uvar -> bool

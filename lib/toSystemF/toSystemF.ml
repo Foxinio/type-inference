@@ -41,7 +41,7 @@ let rec mark_impure env = function
   | SystemF.TArrow(_, _, (TArrow (_,_,_) as tres)) -> mark_impure env tres
   | SystemF.TArrow(arr, _, _) -> Arrow.set_impure arr
   | tp -> Utils.report_internal_error "Expected TArrow: %s"
-    (SystemF.PrettyPrinter.pp_type (Env.get_ctx env) tp)
+    (SystemF.PrettyPrinter.pp_type tp)
 
 let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
   match e.data with
@@ -99,9 +99,9 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
     SystemF.ESeq(tr_expr env e1, tr_expr env e2)
 
   | Imast.EType ((alias, _), ((_, typ) :: _ as ctor_defs), rest) ->
-    let env', tvars = Env.extend_tvar env
-      @@ TVarSet.to_list
-      @@ Schema.get_arguments typ in
+    let env', tvars = Schema.get_arguments typ
+      |> TVarSet.to_list
+      |> Env.extend_tvar env in
     let ctor_defs' = List.map (tr_var env') ctor_defs in
     SystemF.EType(alias, tvars, ctor_defs', tr_expr env rest)
   | Imast.EType ((alias,_), [], rest) ->
@@ -141,6 +141,6 @@ and fold_fn env (body : Schema.typ Imast.expr) =
     fst x' :: res, env, body
   | _ -> failwith "ToSystemF.fold_fn called with wrong argument"
 
-let tr_program ((p,env) : program) : SystemF.program =
-  tr_expr Env.empty p, env
+let tr_program (p : program) : SystemF.program =
+  tr_expr Env.empty p
 

@@ -35,8 +35,7 @@ let rec tr_expr env (e : SystemF.expr) : Ast.expr * SystemF.tp =
 
   | EApp(EExtern (s, _), [e]) when s = "printType" ->
     let _, tp = tr_expr env e in
-    SystemF.PrettyPrinter.pp_type
-      (Env.get_ctx env) tp
+    SystemF.PrettyPrinter.pp_type tp
       |> Builtin.printType,
     TUnit
 
@@ -132,7 +131,6 @@ and tr_clauses env tp = function
     |> List.map (fun (_, x, e) -> x,e)
     |> Array.of_list
 
-let erase_type (p,env) =
-  let env' = Env.with_name_map env in
-  let erased, _ = tr_expr env' p in
-  erased, env
+let erase_type p =
+  let erased, _ = tr_expr Env.empty p in
+  erased

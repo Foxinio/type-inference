@@ -33,6 +33,6 @@ and expr =
 
 and clause = var * expr
 
-type program = expr * string Core.Imast.VarTbl.t
+type program = expr
 
 let unimplemented () = failwith "unimplemented"

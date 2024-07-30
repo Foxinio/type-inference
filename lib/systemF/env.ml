@@ -8,7 +8,6 @@ type t =
   { var_map  : tp VarMap.t;
     tvar_map : tvar TVarMap.t;
     ctor_map : (tp*name*tvar list) VarMap.t;
-    name_map : string VarTbl.t;
   }
 
 (* ------------------------------------------------------------------------- *)
@@ -17,14 +16,6 @@ let empty =
   { var_map  = VarMap.empty;
     tvar_map = TVarMap.empty;
     ctor_map = VarMap.empty;
-    name_map = VarTbl.create 11;
-  }
-
-let with_name_map name_map =
-  { var_map  = VarMap.empty;
-    tvar_map = TVarMap.empty;
-    ctor_map = VarMap.empty;
-    name_map;
   }
 
 (* ------------------------------------------------------------------------- *)
@@ -36,7 +27,7 @@ let add_tvar env a =
   let b = TVar.fresh () in
   { env with tvar_map = TVarMap.add a b env.tvar_map}, b
 
-let add_ctor env ctor_name expected adt_name adt_args =
+let add_ctor env (ctor_name, expected) adt_name adt_args =
   { env with ctor_map = VarMap.add ctor_name (expected, adt_name, adt_args) env.ctor_map }
 
 (* ------------------------------------------------------------------------- *)
@@ -59,8 +50,8 @@ let extend_tvar env lst =
   in
   List.fold_left f (env, []) lst
 
-let extend_ctors env lst name tvars =
-  let f env (name,tp) = add_ctor env name tp name tvars in
+let extend_ctors env lst alias_name tvars =
+  let f env ctor = add_ctor env ctor alias_name tvars in
   List.fold_left f env lst
 
 (* ------------------------------------------------------------------------- *)
@@ -87,12 +78,15 @@ let tvar_set env =
 
 (* ------------------------------------------------------------------------- *)
 
-let get_ctx env =
-  PrettyPrinter.pp_context_of_seq (VarTbl.to_seq env.name_map)
-
-let fresh_var {name_map;_} =
-  let x = Core.Imast.IMAstVar.fresh () in
+let fresh_var () =
   let name = VarTbl.gen_name () in
-  VarTbl.add name_map x name;
+  let x = Core.Imast.VarTbl.fresh_var name in
   x
 
+let pp_vars {var_map; _} =
+  VarMap.to_seq var_map
+    |> Seq.map (fun (x,tp) -> Printf.sprintf "(%s : %s)"
+      (Core.Imast.VarTbl.find x) (PrettyPrinter.pp_type tp))
+    |> List.of_seq
+    |> String.concat ", "
+    |> Printf.sprintf "[%s]"

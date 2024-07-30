@@ -35,6 +35,7 @@ let pipeline (fname : string) =
   |> Core_parser.parse_file
   |> Builtin.handle_buildins
   |> ToImast.translate
+  |> mark "inference"
   |> Typing.infer
   |> ToSystemF.tr_program
   |> dump "toSystemF" SystemF.pp_program
@@ -44,6 +45,7 @@ let pipeline (fname : string) =
   |> dump "tr_with_folds" SystemF.pp_program
   |> check_invariant SystemF.ensure_well_typed
   |> dump "ensure_well_typed" SystemF.pp_program
+  |> mark "type erasure"
   |> Erase.erase_type
   |> Eval.eval_program
   in ()
