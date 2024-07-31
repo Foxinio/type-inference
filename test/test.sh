@@ -8,16 +8,16 @@ fi
 
 cwd="$1"
 exec="$cwd/_build/default/bin/main.exe"
-tester="$cwd/_build/default/test/end2end/simple_tester.exe"
+tester="$cwd/_build/default/test/simple_tester.exe"
 
 
-if [[ -z `find "$cwd/test/end2end/tests/" -name '*.lm'` ]]
+if [[ -z `find "$cwd/test/tests/" -name '*.lm'` ]]
 then
 	echo "no tests found"
 	exit 0
 fi
 
-for file in `find "$cwd/test/end2end/tests/" -name '*.lm' | sort`
+for file in `find "$cwd/test/tests/" -name '*.lm' | sort`
 do
 	$tester $exec $file
 done

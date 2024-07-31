@@ -156,6 +156,76 @@ and fill_unfolds_in_app env args tp =
   |  _ -> Utils.report_internal_error "Application with too many arguments"
 
 (* ========================================================================= *)
+(* Crude analysis *)
+
+let rec unfold_type = function
+  | TUnit | TEmpty | TBool | TInt | TVar _ -> ()
+  | TForallT (_, tp) ->
+    unfold_type tp
+  | TPair(tp1, tp2) ->
+    unfold_type tp1;
+    unfold_type tp2
+  | TADT (_, args) ->
+    List.iter unfold_type args
+  | TArrow (arr, tp1, tp2) ->
+    Arrow.set_unfolded arr;
+    unfold_type tp1;
+    unfold_type tp2
+
+let rec unfold_expr = function
+  | EUnit | EBool _ | ENum _ | EVar _ -> ()
+  | EFn (_, body, tp) ->
+    unfold_type tp;
+    unfold_expr body
+  | EFix (_, _, body, tp) ->
+    unfold_type tp;
+    unfold_expr body
+  | EApp(e1, es) ->
+    unfold_expr e1;
+    List.iter unfold_expr es
+  | ETFn (_, body) ->
+    unfold_expr body
+  | ETApp(e, _) ->
+    unfold_expr e
+  | ELet(x, e1, e2) ->
+    unfold_expr e1;
+    unfold_expr e2
+  | EExtern (_, tp) ->
+    unfold_type tp
+  | EPair(e1, e2) ->
+    unfold_expr e1;
+    unfold_expr e2
+  | EFst e ->
+    unfold_expr e
+  | ESnd e ->
+    unfold_expr e
+  | EIf(e1, e2, e3) -> 
+    unfold_expr e1;
+    unfold_expr e2;
+    unfold_expr e3
+  | ESeq(e1, e2) -> 
+    unfold_expr e1;
+    unfold_expr e2
+  | EType (_, _, ctors, body) ->
+    List.iter unfold_ctors ctors;
+    unfold_expr body
+  | ECtor (_, body) ->
+    unfold_expr body
+  | EMatch(e, clauses, tp) ->
+    unfold_expr e;
+    List.iter unfold_clause clauses;
+    unfold_type tp
+
+and unfold_ctors = function
+  | (_, tp) ->
+    unfold_type tp
+
+and unfold_clause = function
+  | (_, _, e) ->
+    unfold_expr e
+
+
+(* ========================================================================= *)
 (* Transformation *)
 
 (* used to compare arrows, if type is not an arrow, function returnes 0 *)
@@ -323,18 +393,18 @@ and transform_app env e1' es tp eff =
         let x = Env.fresh_var () in
         generate_args (EVar x :: args) (x :: xs) tres
       | tp ->
-      let rec generate_lets lets args' eff = function
-        | (e, eff') :: rest when eff' = Effect.EffImpure ->
-          let x = Env.fresh_var () in
-          generate_lets ((x, e) ::lets) (EVar x::args')
-            (Effect.join eff eff') rest
-        | (e, _) :: rest ->
-          generate_lets lets (e::args') eff rest
-          (* lets are in reverse order,
-              but instead of List.rev we will fold_left *)
-        | [] ->
-          lets, List.rev_append args' args, xs, eff
-      in generate_lets [] [] eff es
+        let rec generate_lets lets args' eff = function
+          | (e, eff') :: rest when eff' = Effect.EffImpure ->
+            let x = Env.fresh_var () in
+            generate_lets ((x, e) ::lets) (EVar x::args')
+              (Effect.join eff eff') rest
+          | (e, _) :: rest ->
+            generate_lets lets (e::args') eff rest
+            (* lets are in reverse order,
+                but instead of List.rev we will fold_left *)
+          | [] ->
+            lets, List.rev_append args' args, xs, eff
+        in generate_lets [] [] eff es
     in generate_args [] [] tp
   in
   let rec uncurring acc es tp =
@@ -425,6 +495,12 @@ and coerse_argument env e expected =
 
 
 let transform_with_folding p =
-  let _ = fill_unfolds Env.empty p in
+  ignore @@ fill_unfolds Env.empty p;
   let p, _, _ = transform_expr Env.empty p in
   p
+
+let crude_transform_with_folding p =
+  unfold_expr p;
+  let p, _, _ = transform_expr Env.empty p in
+  p
+

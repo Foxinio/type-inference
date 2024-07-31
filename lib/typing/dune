@@ -1,4 +1,4 @@
 (library
  (name typing)
- (libraries core type))
+ (libraries core type lmConfig))
 

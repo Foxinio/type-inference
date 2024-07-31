@@ -1,6 +1,11 @@
 (library
+  (name lmConfig)
+  (modules lmConfig))
+
+(library
  (name pipeline)
  (libraries
+   lmConfig
    core
    core_parser
    toImast
@@ -9,5 +14,6 @@
    systemF
    erase
    eval
-   ))
+   )
+ (modules pipeline))
 

@@ -23,19 +23,19 @@ let report_not_enough_arguments () =
 let dump_type2 sep tp1 tp2 =
   let str1 = PrettyPrinter.pp_type tp1 in
   let str2 = PrettyPrinter.pp_type tp2 in
-  Printf.eprintf "[%s%s%s]\n%!" str1 sep str2
+  Utils.debug "[%s%s%s]" str1 sep str2
 
 let dump_type tp =
   let str = PrettyPrinter.pp_type tp in
-  Printf.eprintf "[%s]\n%!" str
+  Utils.debug "[%s]" str
 
 let dump_expr e =
   let str = PrettyPrinter.pp_expr e in
-  Printf.eprintf "%s\n%!" str
+  Utils.debug "%s" str
 
 
 let counter = ref 0
 let mark stage =
-  Printf.eprintf "[%d] %s\n%!" !counter stage;
+  Utils.debug "[%d] %s" !counter stage;
   incr counter
 

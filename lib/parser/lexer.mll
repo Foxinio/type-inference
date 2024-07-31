@@ -57,6 +57,7 @@ rule token = parse
   | "("  { YaccParser.BR_OPN    }
   | ")"  { YaccParser.BR_CLS    }
   | "=>" { YaccParser.ARROW2    }
+  | "->" { YaccParser.ARROW1    }
   | "|"  { YaccParser.BAR       }
   | ","  { YaccParser.COMMA     }
   | "="  { YaccParser.EQ        }

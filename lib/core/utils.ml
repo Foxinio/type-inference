@@ -20,15 +20,34 @@ let type_name_gen i =
   in
   inner i
 
+let maybe_print cond s =
+  if !LmConfig.debug_log
+  then Printf.eprintf "%s\n%!" s
+
+let debug fmt =
+  Printf.ksprintf (maybe_print !LmConfig.debug_log) fmt
+
+let mark_stage fmt =
+  Printf.ksprintf (maybe_print !LmConfig.print_stages) fmt
+
+let dump_ast aststr =
+  let wall = String.make 40 '#' in
+  Printf.ksprintf (maybe_print !LmConfig.print_asts)
+  "%s\n%s\n%s\n" wall aststr wall
+
+
 (** Exception that aborts the interpreter *)
 
+exception Syntax_error of string
 
-exception Fatal_error
-exception Internal_error
-exception Runtime_error
+exception Fatal_error of string
 
-let quit e _ =
-  raise e
+exception Internal_error of string
+
+exception Runtime_error of string
+
+let quit _ =
+  exit 1
 
 (** Pretty-printer of locations *)
 let string_of_pp (start_p : Lexing.position) (end_p : Lexing.position) =
@@ -47,14 +66,14 @@ let string_of_pp (start_p : Lexing.position) (end_p : Lexing.position) =
 (** report an error not related to any location. *)
 let report_error_no_pos fmt =
   Printf.kfprintf
-    (quit Fatal_error)
+    quit
     stderr
     ("error: " ^^ fmt ^^ "\n")
 
 (** report an error related to a location between given positions. *)
 let report_error_pp start_p end_p fmt =
   Printf.kfprintf
-    (quit Fatal_error)
+    quit
     stderr
     ("%s: error: " ^^ fmt ^^ "\n")
     (string_of_pp start_p end_p)
@@ -65,12 +84,12 @@ let report_error (node : ('a,'b) Ast.node) fmt =
 
 let report_internal_error fmt =
   Printf.kfprintf
-    (quit Internal_error)
+    quit
     stderr
-    ("internal error: " ^^ fmt ^^ "\n")
+    ("Internal error: " ^^ fmt ^^ "\n")
 
 let report_runtime_error fmt =
   Printf.kfprintf
-    (quit Runtime_error)
+    quit
     stderr
-    ("internal error: " ^^ fmt ^^ "\n")
+    ("Runtime error: " ^^ fmt ^^ "\n")

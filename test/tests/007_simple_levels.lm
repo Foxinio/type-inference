@@ -1,0 +1,39 @@
+type t1 =
+  | A1 : unit
+  | B1 : unit
+
+let map_pair p1 p2 =
+  ((fst p1) (fst p2), (snd p1) (snd p2))
+
+let f1 a1 =
+  type t2 =
+    | A2 : unit
+    | B2 : unit
+  let f2 a2 =
+    type t3 =
+      | A3 : unit
+      | B3 : unit
+    let g3 b3 =
+      match b3 with
+      | A3 _ => A2 ()
+      | B3 _ => B2 ()
+      end
+    in g3
+      (match a2 with
+      | A2 _ => A3 ()
+      | B2 _ => B3 ()
+      end)
+  let g2 b2 =
+    match b2 with
+    | A2 _ => A1 ()
+    | B2 _ => B1 ()
+    end
+  in g2
+    (match a1 with
+    | A1 _ => A2 ()
+    | B1 _ => B2 ()
+    end)
+in
+
+let _ = map_pair (f1, f1) (A1 (), B1 ()) in
+()

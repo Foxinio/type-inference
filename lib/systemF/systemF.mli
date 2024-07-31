@@ -109,6 +109,9 @@ val ensure_well_typed : program -> unit
 val transform_with_effects : program -> program
 val transform_with_folding : program -> program
 
+val crude_transform_with_effects : program -> program
+val crude_transform_with_folding : program -> program
+
 val type_equal : tp -> tp -> bool
 val subtype    : tp -> tp -> bool
 val supertype  : tp -> tp -> bool

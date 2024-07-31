@@ -211,7 +211,10 @@ and check_app_correctness env args tp eff1 =
   in inner1 args tp eff1
 
 let ensure_well_typed p =
-  let _, _ = infer_type Env.empty p in
+  let env = Env.empty in
+  ignore @@ infer_type env p;
+  if !LmConfig.print_env then (
+    Printf.eprintf "Env: %s\n%!" (Env.pp_vars env));
   ()
 
 

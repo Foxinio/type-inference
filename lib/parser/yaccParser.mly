@@ -7,7 +7,7 @@
 %token<int> NUM
 %token BR_OPN BR_CLS
 %token TYP_STAR TYP_COLON
-%token ARROW2 BAR COMMA EQ SEMICOLON
+%token ARROW2 BAR COMMA EQ SEMICOLON ARROW1
 %token KW_ELSE KW_BEGIN KW_END KW_FALSE KW_FIX KW_FN KW_FST KW_IF
 %token KW_IN KW_LET KW_MATCH KW_REC KW_SND KW_THEN KW_TRUE KW_TYPE
 %token KW_WITH
@@ -33,7 +33,7 @@ expl_type_list2
 ;
 
 expl_type
-: prod_type ARROW2 expl_type                 { TArrow ($1, $3) }
+: prod_type ARROW1 expl_type                 { TArrow ($1, $3) }
 | prod_type                                  { $1              }
 ;
 

@@ -1,2 +1,3 @@
 (library
- (name core))
+ (name core)
+ (libraries lmConfig))

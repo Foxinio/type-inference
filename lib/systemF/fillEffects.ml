@@ -84,7 +84,6 @@ let rec fill_effects env e arr =
 
   | EApp (e1, es) ->
     let tp1 = fill_effects env e1 arr in
-    Printf.eprintf "Calling fill_effects_in_app on %s\n" (PrettyPrinter.pp_expr e);
     assert(not @@ List.is_empty es);
     fill_effects_in_app env es tp1 arr
 
@@ -184,6 +183,75 @@ and fill_effects_in_app env args tp arr =
       inner args tres arr
     | _ :: _, _ -> Utils.report_too_many_arguments ()
   in inner args tp arr
+
+(* =========================================================================== *)
+(* Crude analysis *)
+
+let rec impure_type = function
+  | TUnit | TEmpty | TBool | TInt | TVar _ -> ()
+  | TForallT (_, tp) ->
+    impure_type tp
+  | TPair(tp1, tp2) ->
+    impure_type tp1;
+    impure_type tp2
+  | TADT (_, args) ->
+    List.iter impure_type args
+  | TArrow (arr, tp1, tp2) ->
+    Arrow.set_impure arr;
+    impure_type tp1;
+    impure_type tp2
+
+let rec impure_expr = function
+  | EUnit | EBool _ | ENum _ | EVar _ -> ()
+  | EFn (_, body, tp) ->
+    impure_type tp;
+    impure_expr body
+  | EFix (_, _, body, tp) ->
+    impure_type tp;
+    impure_expr body
+  | EApp(e1, es) ->
+    impure_expr e1;
+    List.iter impure_expr es
+  | ETFn (_, body) ->
+    impure_expr body
+  | ETApp(e, _) ->
+    impure_expr e
+  | ELet(x, e1, e2) ->
+    impure_expr e1;
+    impure_expr e2
+  | EExtern (_, tp) ->
+    impure_type tp
+  | EPair(e1, e2) ->
+    impure_expr e1;
+    impure_expr e2
+  | EFst e ->
+    impure_expr e
+  | ESnd e ->
+    impure_expr e
+  | EIf(e1, e2, e3) -> 
+    impure_expr e1;
+    impure_expr e2;
+    impure_expr e3
+  | ESeq(e1, e2) -> 
+    impure_expr e1;
+    impure_expr e2
+  | EType (_, _, ctors, body) ->
+    List.iter impure_ctors ctors;
+    impure_expr body
+  | ECtor (_, body) ->
+    impure_expr body
+  | EMatch(e, clauses, tp) ->
+    impure_expr e;
+    List.iter impure_clause clauses;
+    impure_type tp
+
+and impure_ctors = function
+  | (_, tp) ->
+    impure_type tp
+
+and impure_clause = function
+  | (_, _, e) ->
+    impure_expr e
 
 (* ========================================================================= *)
 (* Transformation *)
@@ -361,6 +429,12 @@ and transform_app env (e1', tp1, eff1) es' =
     else transform_app env res rest
 
 let transform_with_effects p =
-  let _ = fill_effects Env.empty p (Arrow.fresh ()) in
+  ignore @@ fill_effects Env.empty p (Arrow.fresh ());
   let p, _, _ = transform_expr Env.empty p in
   p
+
+let crude_transform_with_effects p =
+  impure_expr p;
+  let p, _, _ = transform_expr Env.empty p in
+  p
+  

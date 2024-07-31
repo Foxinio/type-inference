@@ -1,0 +1,12 @@
+let lam11 = fn x1 => let _ = () in fn x2 => ()
+let lam2  = fn x1 x2 => ()
+
+let mod11 f a b =
+	let f' = f a in
+	f' b
+
+let _ = mod11 lam11
+
+let _ = mod11 lam2
+
+in ()

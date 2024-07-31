@@ -4,10 +4,13 @@ open Core
 open Imast
 open Main
 
+module Tbl = IMAstVar.MakeHashtbl()
+
 type t =
   { var_map  : tp VarMap.t;
     tvar_map : tvar TVarMap.t;
     ctor_map : (tp*name*tvar list) VarMap.t;
+    constant : tp Tbl.t;
   }
 
 (* ------------------------------------------------------------------------- *)
@@ -16,11 +19,18 @@ let empty =
   { var_map  = VarMap.empty;
     tvar_map = TVarMap.empty;
     ctor_map = VarMap.empty;
+    constant = Tbl.create 11;
   }
 
 (* ------------------------------------------------------------------------- *)
 
+let add_tbl tbl x tp =
+  match Tbl.find_opt tbl x with
+  | Some tp' when Order.type_equal tp tp' -> ()
+  | _ -> Tbl.add tbl x tp
+
 let add_var env x tp =
+  add_tbl env.constant x tp;
   { env with var_map = VarMap.add x tp env.var_map }
 
 let add_tvar env a =
@@ -83,10 +93,10 @@ let fresh_var () =
   let x = Core.Imast.VarTbl.fresh_var name in
   x
 
-let pp_vars {var_map; _} =
-  VarMap.to_seq var_map
-    |> Seq.map (fun (x,tp) -> Printf.sprintf "(%s : %s)"
-      (Core.Imast.VarTbl.find x) (PrettyPrinter.pp_type tp))
+let pp_vars env =
+  Tbl.to_seq env.constant
+    |> Seq.map (fun (x,tp) -> Printf.sprintf "(%s#%s : %s)"
+      (Core.Imast.VarTbl.find x) (Core.Imast.IMAstVar.to_string x) (PrettyPrinter.pp_type tp))
     |> List.of_seq
-    |> String.concat ", "
-    |> Printf.sprintf "[%s]"
+    |> String.concat ",\n  "
+    |> Printf.sprintf "[\n  %s\n]"

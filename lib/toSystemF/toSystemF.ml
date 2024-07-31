@@ -2,23 +2,28 @@ module Arrow = SystemF.Arrow
 open Core
 open Typing
 
-let rec tr_type env (tp : Type.t) : SystemF.tp =
+let tr_type env (tp : Type.t) : SystemF.tp =
   let open Type in
-  match view tp with
-  | TUVar _ ->
-    failwith "Unification variable unrealized"
-  | TUnit -> SystemF.TUnit
-  | TEmpty -> SystemF.TEmpty
-  | TBool -> SystemF.TBool
-  | TInt  -> SystemF.TInt
-  | TVar x -> SystemF.TVar (Env.lookup_tvar env x)
-  | TArrow(targ, tres) ->
-    let arvar = Arrow.fresh () in
-    SystemF.TArrow(arvar, tr_type env targ, tr_type env tres)
-  | TPair(tp1, tp2) ->
-    SystemF.TPair(tr_type env tp1, tr_type env tp2)
-  | TADT(a, _, tps) ->
-    SystemF.TADT(a, List.map (tr_type env) tps)
+  let exception UVarFound in
+  let rec inner (tp : Type.t) : SystemF.tp =
+    match view tp with
+    | TUVar _ -> raise_notrace UVarFound
+    | TUnit -> SystemF.TUnit
+    | TEmpty -> SystemF.TEmpty
+    | TBool -> SystemF.TBool
+    | TInt  -> SystemF.TInt
+    | TVar x -> SystemF.TVar (Env.lookup_tvar env x)
+    | TArrow(targ, tres) ->
+      let arvar = Arrow.fresh () in
+      SystemF.TArrow(arvar, inner targ, inner tres)
+    | TPair(tp1, tp2) ->
+      SystemF.TPair(inner tp1, inner tp2)
+    | TADT(a, _, tps) ->
+      SystemF.TADT(a, List.map inner tps)
+  in
+  try inner tp with UVarFound ->
+    Utils.report_error_no_pos "Unification variable unrealized in %s"
+      (Typing.PrettyPrint.pp_type tp)
 
 let tr_poly_typ env typ =
   let tp = Schema.get_template typ

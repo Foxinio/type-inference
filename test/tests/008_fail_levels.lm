@@ -18,22 +18,24 @@ let f1 a1 =
 			| A3 _ => A2 ()
 			| B3 _ => B2 ()
 			end
-		in g3
-			(match a2 with
-			| A2 _ => A3 ()
-			| B2 _ => B3 ()
-			end)
+		in
+		match a2 with
+		| A2 _ => A3 ()
+		| B2 _ => B3 ()
+		end
 	let g2 b2 =
 		match b2 with
 		| A2 _ => A1 ()
 		| B2 _ => B1 ()
 		end
-	in g2
-		(match a1 with
+	in g2 (match a1 with
 		| A1 _ => A2 ()
 		| B1 _ => B2 ()
 		end)
-in
 
-let _ = map_pair (f1, f1) (A1 (), B1 ()) in
-()
+let _ = map_pair (f1, f1) (A1 (), B1 ())
+
+in ()
+//@stderr: Levels difference.*t3
+//@stderr: Fatal_error
+//@code: 1

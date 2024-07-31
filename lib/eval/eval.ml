@@ -110,4 +110,7 @@ let rec pp_value v =
 
 
 let eval_program p =
-  eval Env.empty p |> pp_value |> print_endline
+  eval Env.empty p |> pp_value |> print_endline;
+  if !LmConfig.print_stats then
+    Printf.printf "Closure created %d times\n%!" !clo_counter
+

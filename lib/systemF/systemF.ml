@@ -1,6 +1,6 @@
 
-let transform_with_effects = FillEffects.transform_with_effects
-let transform_with_folding = FillFolding.transform_with_folding
+include FillEffects
+include FillFolding
 
 let pp_program = PrettyPrinter.pp_expr
 
