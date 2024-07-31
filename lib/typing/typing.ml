@@ -15,6 +15,6 @@ module Schema = struct
     instantiate ?mapping lvl typ |> fst
 end
 
-module PrettyPrint = PrettyPrinter
+module PrettyPrinter = PrettyPrinter
 module Level = Type.Level
 

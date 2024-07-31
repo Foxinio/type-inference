@@ -1,7 +1,7 @@
 open Type
 module Utils = Core.Utils
 
-(* ========================================================================== *)
+(* ========================================================================= *)
 (* Pretty printing of types *)
 
 type ('a, 'b, 'c) vars =
@@ -16,7 +16,7 @@ type ('a, 'b, 'c) ctx_struct = {
   named: int;
 }
 
-(* ========================================================================== *)
+(* ========================================================================= *)
 (** Creates fresh pretty-printing context *)
 let pp_context () =
   let var_seq = Core.Imast.VarTbl.to_seq () in
@@ -83,13 +83,14 @@ let rec pp_type ctx lvl tp =
   and pp_list separator ctx lvl = function
     | [ tp ] -> pp_type ctx (lvl-1) tp
     | tp :: tps ->
-        Printf.sprintf "%s %s %s" (pp_type ctx lvl tp) separator (pp_list separator ctx lvl tps)
+      Printf.sprintf "%s %s %s"
+        (pp_type ctx lvl tp) separator (pp_list separator ctx lvl tps)
     | [] -> "Unit"
   in Type.view tp |> matcher lvl
 
 let pp_type = pp_type (pp_context ()) 0
 
-(* ========================================================================== *)
+(* ========================================================================= *)
 (** PrettyPrint expression *)
 
 let pp_expr e =

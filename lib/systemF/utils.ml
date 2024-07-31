@@ -4,11 +4,13 @@ open Core
 let report_type_missmatch tp1 tp2 =
   let tstr1 = PrettyPrinter.pp_type tp1 in
   let tstr2 = PrettyPrinter.pp_type tp2 in
-  Utils.report_internal_error "Type missmatch, expected: [%s], actual [%s]" tstr1 tstr2
+  Utils.report_internal_error
+    "Type missmatch, expected: [%s], actual [%s]" tstr1 tstr2
 
 let report_unexpected_type tp expected =
   let tstr = PrettyPrinter.pp_type tp in
-  Utils.report_internal_error "Unexpected type: [%s], expected [%s]" tstr expected
+  Utils.report_internal_error
+    "Unexpected type: [%s], expected [%s]" tstr expected
 
 let report_unbound_tvar () =
   Utils.report_internal_error "SystemF: unbound tvar"

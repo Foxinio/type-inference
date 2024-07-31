@@ -64,6 +64,7 @@ let rec subtype tp1 tp2 =
     subtype tp1a tp2a && subtype tp1b tp2b
   | TPair _, _ -> false
 
-  | (TUnit | TEmpty | TBool | TInt | TVar _  | TADT (_, _)), _ -> type_equal tp1 tp2
+  | (TUnit | TEmpty | TBool | TInt | TVar _  | TADT (_, _)), _ ->
+    type_equal tp1 tp2
 
 let supertype tp1 tp2 = subtype tp2 tp1

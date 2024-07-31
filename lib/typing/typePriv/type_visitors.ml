@@ -20,7 +20,8 @@ let iter f : t -> unit =
 
 let rec fold_map f init =
   let default acc t = match t with
-    | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar ({contents={value=Unrealised _;_}}) -> acc, t
+    | TUnit | TEmpty | TBool | TInt | TVar _
+    | TUVar ({contents={value=Unrealised _;_}}) -> acc, t
     | TUVar {contents={value=Realised tp;_}} ->
       fold_map f acc tp
     | TADT (name, lvl, tps) ->
@@ -42,7 +43,8 @@ let rec fold_map f init =
 let map f : t -> t =
   let rec default t =
     match t with
-    | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar ({contents={value=Unrealised _;_}}) -> t
+    | TUnit | TEmpty | TBool | TInt | TVar _
+    | TUVar ({contents={value=Unrealised _;_}}) -> t
     | TUVar {contents={value=Realised tp;_}} ->
       f default tp
     | TADT (name, lvl, tps) ->
@@ -56,7 +58,8 @@ let map f : t -> t =
 
 let foldl (f : ('a -> t -> 'a) -> 'a -> t -> 'a) (init : 'a) (tp : t) =
   let rec default init (tp : t) = match tp with
-    | TUnit | TEmpty | TBool | TInt | TVar _ | TUVar ({contents={value=Unrealised _;_}}) -> init
+    | TUnit | TEmpty | TBool | TInt | TVar _
+    | TUVar ({contents={value=Unrealised _;_}}) -> init
     | TPair (tp1, tp2) ->
       let init = f default init tp1 in
       let init = f default init tp2 in

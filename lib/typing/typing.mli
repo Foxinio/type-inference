@@ -65,7 +65,7 @@ module Type : sig
 
 end
 
-module PrettyPrint : sig
+module PrettyPrinter : sig
   val pp_type : Type.t -> string
 
   val pp_expr : Schema.typ expr -> string

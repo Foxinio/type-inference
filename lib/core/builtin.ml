@@ -1,7 +1,7 @@
 open Imast
 open Effect
 
-(* ========================================================================== *)
+(* ========================================================================= *)
 
 let prelude_pos = { Lexing.dummy_pos with pos_fname="Prelude" }
 
@@ -11,28 +11,28 @@ let make data : ('a, 'b) Ast.node =
 module StringMap = Map.Make(String)
 
 let builtin_functions = [
-    "add",
-      Ast.EExtern ("add", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TInt);
-    "sub",
-      Ast.EExtern ("sub", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TInt);
-    "mult",
-      Ast.EExtern ("mult", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TInt);
-    "div",
-      Ast.EExtern ("div", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TInt);
-      (* Sould `div` be pure since it can fail for div_by_zero? *)
-    "eq",
-      Ast.EExtern ("eq", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TBool);
-    "le",
-      Ast.EExtern ("le", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TBool);
-    "not",
-      Ast.EExtern ("not", EffPure, Ast.t_arrow [Ast.TBool] Ast.TBool);
-    "readInt",
-      Ast.EExtern ("readInt", EffImpure, Ast.t_arrow [Ast.TUnit] Ast.TInt);
-    "printInt",
-      Ast.EExtern ("printInt", EffImpure, Ast.t_arrow [Ast.TInt] Ast.TUnit);
-    "printAscii",
-      Ast.EExtern ("printAscii", EffImpure, Ast.t_arrow [Ast.TInt] Ast.TUnit);
-  ]
+  "add",
+    Ast.EExtern ("add", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TInt);
+  "sub",
+    Ast.EExtern ("sub", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TInt);
+  "mult",
+    Ast.EExtern ("mult", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TInt);
+  "div",
+    Ast.EExtern ("div", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TInt);
+    (* Sould `div` be pure since it can fail for div_by_zero? *)
+  "eq",
+    Ast.EExtern ("eq", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TBool);
+  "le",
+    Ast.EExtern ("le", EffPure, Ast.t_arrow [Ast.TInt; Ast.TInt] Ast.TBool);
+  "not",
+    Ast.EExtern ("not", EffPure, Ast.t_arrow [Ast.TBool] Ast.TBool);
+  "readInt",
+    Ast.EExtern ("readInt", EffImpure, Ast.t_arrow [Ast.TUnit] Ast.TInt);
+  "printInt",
+    Ast.EExtern ("printInt", EffImpure, Ast.t_arrow [Ast.TInt] Ast.TUnit);
+  "printAscii",
+    Ast.EExtern ("printAscii", EffImpure, Ast.t_arrow [Ast.TInt] Ast.TUnit);
+]
 
 let prepend_prelude ast =
   let f (name, extern) body =
@@ -41,13 +41,13 @@ let prepend_prelude ast =
   List.fold_right f builtin_functions ast
 
 let subst_dependent = [
-    "and",
-      Ast.EExtern ("and", EffPure, Ast.t_arrow [Ast.TBool; Ast.TBool] Ast.TBool);
-    "or",
-      Ast.EExtern ("or", EffPure, Ast.t_arrow [Ast.TBool; Ast.TBool] Ast.TBool);
-    "printType",
-      Ast.EExtern ("printType", EffImpure, Ast.t_arrow [Ast.THole] Ast.TUnit);
-  ]
+  "and",
+    Ast.EExtern ("and", EffPure, Ast.t_arrow [Ast.TBool; Ast.TBool] Ast.TBool);
+  "or",
+    Ast.EExtern ("or", EffPure, Ast.t_arrow [Ast.TBool; Ast.TBool] Ast.TBool);
+  "printType",
+    Ast.EExtern ("printType", EffImpure, Ast.t_arrow [Ast.THole] Ast.TUnit);
+]
 
 let subst_prelude ast =
   let rec inner env (e : 'a Ast.expr) =

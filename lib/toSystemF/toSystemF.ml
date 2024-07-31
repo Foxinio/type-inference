@@ -23,7 +23,7 @@ let tr_type env (tp : Type.t) : SystemF.tp =
   in
   try inner tp with UVarFound ->
     Utils.report_error_no_pos "Unification variable unrealized in %s"
-      (Typing.PrettyPrint.pp_type tp)
+      (Typing.PrettyPrinter.pp_type tp)
 
 let tr_poly_typ env typ =
   let tp = Schema.get_template typ

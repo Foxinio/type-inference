@@ -28,11 +28,13 @@ let subst_type tp x s =
   subst (TVarMap.singleton x s) tp
 
 let subst_list tp xs ys =
-  let tsub = List.fold_left2 (fun tsub x y -> TVarMap.add x y tsub) TVarMap.empty xs ys in
+  let tsub = List.fold_left2
+    (fun tsub x y -> TVarMap.add x y tsub) TVarMap.empty xs ys in
   subst tsub tp
 
 let subst_mapping tp xs =
-  let tsub = List.fold_left (fun tsub (x,tp) -> TVarMap.add x tp tsub) TVarMap.empty xs in
+  let tsub = List.fold_left
+    (fun tsub (x,tp) -> TVarMap.add x tp tsub) TVarMap.empty xs in
   subst tsub tp
 
 
@@ -63,9 +65,11 @@ let get_subst env_bound_tvars template instance =
       let mapping = inner bounded mapping tp1a tp2a in
       let mapping = inner bounded mapping tp1b tp2b in
       mapping
-    | TADT (a1, tps1), TADT (a2, tps2) when Core.Imast.IMAstVar.compare a1 a2 = 0 ->
+    | TADT (a1, tps1), TADT (a2, tps2)
+        when Core.Imast.IMAstVar.compare a1 a2 = 0 ->
       List.fold_left2 (inner bounded) mapping tps1 tps2
-    | (TUnit | TBool | TInt | TEmpty | TArrow _ | TPair _ | TADT _ | TForallT _ ), _ ->
+    | (TUnit | TBool | TInt | TEmpty | TArrow _ | TPair _ | TADT _
+      | TForallT _ ), _ ->
       Utils.report_type_missmatch template instance
   in
   inner env_bound_tvars TVarMap.empty template instance

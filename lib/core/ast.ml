@@ -88,8 +88,9 @@ module Make(VarType : sig type t end) = struct
     in
     f default t
 
-  (** The same way fold_right starts from the end of the list and makes it way outside,
-        `fold_right f [a1; ...; an] init` is `f a1 (f a2 (... (f an init) ...))`
+  (** The same way fold_right starts from the end of the list
+      and makes it way outside,
+      `fold_right f [a1; ...; an] init` is `f a1 (f a2 (... (f an init) ...))`
       foldr on trees works bottom-up. Not tail-recursive.
       *)
   let rec type_foldr f t init =
@@ -104,8 +105,9 @@ module Make(VarType : sig type t end) = struct
     in
     f default (type_foldr f t init) t
 
-  (** The same way fold_left starts from the begining of the list and makes it way inside,
-        `fold_left f init [b1; ...; bn]` is `f (... (f (f init b1) b2) ...) bn`
+  (** The same way fold_left starts from the begining of the list
+      and makes it way inside,
+      `fold_left f init [b1; ...; bn]` is `f (... (f (f init b1) b2) ...) bn`
       foldl on trees works top-down.
       *)
   let rec type_foldl f init t =
@@ -128,8 +130,10 @@ module Make(VarType : sig type t end) = struct
       | ENum n  -> "ENum ^"^string_of_int n
       | EVar (x,tps)  -> "EVar "^string_of_var (x,tps)
       | EExtern (name, _, _)  -> "EExtern "^name
-      | EFn (x, e)  -> "EFn "^string_of_var_def x^" -> "^aux e
-      | EFix (f, x, e)  -> "EFix "^string_of_var_def f^" "^string_of_var_def x^" -> "^aux e
+      | EFn (x, e) ->
+        "EFn "^string_of_var_def x^" -> "^aux e
+      | EFix (f, x, e)  ->
+        "EFix "^string_of_var_def f^" "^string_of_var_def x^" -> "^aux e
       | EApp (e1, e2)  -> "EApp "^aux e1^" "^aux e2
       | ELet (x, e1, e2)  -> "ELet "^string_of_var_def x^" "^aux e1^"\n"^aux e2
       | EPair (e1, e2)  -> "EPair "^aux e1^" "^aux e2

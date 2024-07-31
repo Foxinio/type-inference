@@ -45,7 +45,7 @@ let pipeline (fname : string) =
 
   |> Typing.infer
   |> mark "Type inference"
-  |> dump Typing.PrettyPrint.pp_expr
+  |> dump Typing.PrettyPrinter.pp_expr
 
   |> ToSystemF.tr_program
   |> mark "ToSystemF translation"

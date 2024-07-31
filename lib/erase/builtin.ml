@@ -1,4 +1,4 @@
-(* ============================================================================= *)
+(* ========================================================================= *)
 
 open Ast
 
@@ -121,6 +121,6 @@ let lookup_builtin str tp_arity =
     EFn([x], EFn([y], EApp(extern, [EVar x; EVar y])))
   | [1;0], [1]
   | [2;0], [2] -> extern
-  | _ -> failwith (
-    Printf.sprintf "internal error: builtin coerssion. expected [%s], actual [%s]"
-    (string_of_int_list arity) (string_of_int_list tp_arity))
+  | _ -> Core.Utils.report_internal_error
+    "internal error: builtin coerssion. expected [%s], actual [%s]"
+    (string_of_int_list arity) (string_of_int_list tp_arity)

@@ -25,7 +25,7 @@ open Ast
 
 %%
 
-// =============================================================================
+// ============================================================================
 
 expl_type_list2
 : expl_type COMMA expl_type       { [ $1 ]   }
@@ -53,7 +53,7 @@ simpl_type
 | TYP_KW_UNIT                       { TUnit                    }
 ;
 
-// =============================================================================
+// ============================================================================
 
 bar_opt
 : /* empty */ { () }
@@ -80,7 +80,7 @@ alias
 | LID BR_OPN aid_list2 BR_CLS { ($1, $3)   }
 ;
 
-// =============================================================================
+// ============================================================================
 
 id
 : LID                                   { make $1             }
@@ -92,19 +92,20 @@ id_list1
 | id id_list1 { $1 :: $2 }
 ;
 
-// =============================================================================
+// ============================================================================
 
 def
-: KW_LET LID EQ expr                     { make (DLet(($2, THole), $4))         }
-| KW_LET LID TYP_COLON expl_type EQ expr { make_with_typ (DLet(($2,$4), $6)) $4 }
-| KW_LET LID id_list1 EQ expr            { desugar_let_fun $2 $3 $5 THole       }
+: KW_LET LID EQ expr                  { make (DLet(($2, THole), $4))         }
+| KW_LET LID id_list1 EQ expr         { desugar_let_fun $2 $3 $5 THole       }
+| KW_LET LID TYP_COLON
+  expl_type EQ expr                   { make_with_typ (DLet(($2,$4), $6)) $4 }
 | KW_LET LID id_list1
-  TYP_COLON expl_type EQ expr            { desugar_let_fun $2 $3 $7 $5    }
-| KW_LET KW_REC LID id_list1 EQ expr     { desugar_let_rec $3 $4 $6 THole }
+  TYP_COLON expl_type EQ expr         { desugar_let_fun $2 $3 $7 $5    }
+| KW_LET KW_REC LID id_list1 EQ expr  { desugar_let_rec $3 $4 $6 THole }
 | KW_LET KW_REC LID id_list1
-  TYP_COLON expl_type EQ expr            { desugar_let_rec $3 $4 $8 $6 }
-| KW_TYPE alias EQ bar_opt const_list    { make (DType ($2, $5))       }
-| KW_TYPE alias EQ expl_type             { make (DTypeAlias ($2, $4))  }
+  TYP_COLON expl_type EQ expr         { desugar_let_rec $3 $4 $8 $6 }
+| KW_TYPE alias EQ bar_opt const_list { make (DType ($2, $5))       }
+| KW_TYPE alias EQ expl_type          { make (DTypeAlias ($2, $4))  }
 ;
 
 def_list1
@@ -112,7 +113,7 @@ def_list1
 | def def_list1 { $1 :: $2 }
 ;
 
-// =============================================================================
+// ============================================================================
 
 expr
 : def_list1 KW_IN expr            { desugar_defs $1 $3         }
@@ -144,7 +145,7 @@ expr_simple
 | KW_FALSE                      { make (EBool false)   }
 ;
 
-// =============================================================================
+// ============================================================================
 
 match_expr
 : KW_MATCH expr KW_WITH bar_opt clauses KW_END
@@ -161,7 +162,7 @@ clauses
 | clause BAR clauses { $1 :: $3 }
 ;
 
-// =============================================================================
+// ============================================================================
 
 file
 : expr EOF { $1 }

@@ -28,5 +28,8 @@ val pp_env : t -> string
 val string_of_level : t -> string
 
 val fresh_uvar : t -> Type.t
-val instantiate : ?mapping:Type.t Type.TVarMap.t -> t -> Schema.typ -> Type.t * Type.t list
+val instantiate :
+  ?mapping:Type.t Type.TVarMap.t ->
+  t ->
+  Schema.typ -> Type.t * Type.t list
 val generalize : t -> Type.t -> Schema.typ

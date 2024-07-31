@@ -1,4 +1,4 @@
-(* simple tester for runing files and checkint output *)
+(** simple tester for runing files and checkint output *)
 
 
 type expected = {
@@ -57,7 +57,7 @@ let collect_metadata fd =
     exit_code=(!exit_code);
   }
 
-(* -------------------------------------------------------------------------- *)
+(* ------------------------------------------------------------------------- *)
 
 type child = {
   pid : int;
@@ -72,7 +72,7 @@ let run_program exec file args =
   let pid = Unix.process_full_pid channels in
   { pid; stdin; stdout; stderr; }
 
-(* -------------------------------------------------------------------------- *)
+(* ------------------------------------------------------------------------- *)
 
 let failed = ref false
 
@@ -105,7 +105,7 @@ let handle_exit (expected : expected) proc_status =
   | Unix.WSTOPPED _ -> failwith "unexpected handle_exit case"
   end
 
-(* -------------------------------------------------------------------------- *)
+(* ------------------------------------------------------------------------- *)
 
 let check_line expected actual =
   if Str.string_match (Str.regexp_string expected) actual 0
@@ -176,7 +176,8 @@ let loop ~check_loop loopable expected child_pid =
         handle_exit expected' proc_status
       | false, false ->
         Unix.kill child_pid Sys.sigkill;
-        Printf.eprintf "Error: Program did not terminate as expected, killing.\n";
+        Printf.eprintf
+          "Error: Program did not terminate as expected, killing.\n";
         failed := true;
         handle_exit expected' proc_status
       | false, true ->
@@ -210,7 +211,7 @@ let test_prog ?(check_loop=false) exec file args =
   | false ->
     Printf.eprintf "Test passed  [%s]\n" file
 
-(* ========================================================================== *)
+(* ========================================================================= *)
 
 let main () =
   if Array.length Sys.argv < 2 then (
@@ -220,8 +221,7 @@ let main () =
       Printf.printf "check loop enabled\n%!";
       test_prog ~check_loop:true Sys.argv.(2) Sys.argv.(3)
         (Array.sub Sys.argv 4 (Array.length Sys.argv - 4))
-    )
-    else
+    ) else
       test_prog
         Sys.argv.(1)
         Sys.argv.(2)

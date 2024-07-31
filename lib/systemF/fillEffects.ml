@@ -184,7 +184,7 @@ and fill_effects_in_app env args tp arr =
     | _ :: _, _ -> Utils.report_too_many_arguments ()
   in inner args tp arr
 
-(* =========================================================================== *)
+(* ========================================================================= *)
 (* Crude analysis *)
 
 let rec impure_type = function

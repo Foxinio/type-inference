@@ -4,13 +4,15 @@ let makeUvar gvar level =
   { value=Unrealised level; id=UVar.fresh (); }
 
 let string_of_uvar uv = match !uv with
-  | {value=Unrealised lvl; id } -> "["^Level.to_string lvl^","^UVar.to_string id^"]"
+  | {value=Unrealised lvl; id } ->
+    "["^Level.to_string lvl^","^UVar.to_string id^"]"
   | {value=Realised _; id } -> "[id="^UVar.to_string id^"]"
 
 let fresh_uvar level =
   TUVar (ref (makeUvar false level))
 
-let uvar_compare { contents={id=id1;_}} { contents={id=id2;_}} = UVar.compare id1 id2
+let uvar_compare { contents={id=id1;_}} { contents={id=id2;_}} =
+  UVar.compare id1 id2
 
 module UVarSet = Set.Make(struct
   type t = uvar

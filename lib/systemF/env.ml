@@ -38,7 +38,8 @@ let add_tvar env a =
   { env with tvar_map = TVarMap.add a b env.tvar_map}, b
 
 let add_ctor env (ctor_name, expected) adt_name adt_args =
-  { env with ctor_map = VarMap.add ctor_name (expected, adt_name, adt_args) env.ctor_map }
+  let ctor = expected, adt_name, adt_args in
+  { env with ctor_map=VarMap.add ctor_name ctor env.ctor_map }
 
 (* ------------------------------------------------------------------------- *)
 
@@ -96,7 +97,9 @@ let fresh_var () =
 let pp_vars env =
   Tbl.to_seq env.constant
     |> Seq.map (fun (x,tp) -> Printf.sprintf "(%s#%s : %s)"
-      (Core.Imast.VarTbl.find x) (Core.Imast.IMAstVar.to_string x) (PrettyPrinter.pp_type tp))
+      (Core.Imast.VarTbl.find x)
+      (Core.Imast.IMAstVar.to_string x)
+      (PrettyPrinter.pp_type tp))
     |> List.of_seq
     |> String.concat ",\n  "
     |> Printf.sprintf "[\n  %s\n]"

@@ -179,7 +179,8 @@ and check_app_correctness env args tp eff1 =
       let targ', eff' = infer_type env e in
       assert_subtype targ' targ;
       inner1 args tres (Effect.join eff eff')
-    | _ :: _, _ -> Utils.report_internal_error "Application with too many arguments"
+    | _ :: _, _ ->
+      Utils.report_internal_error "Application with too many arguments"
 
   (* inner2 will check (2) condition *)
   and inner2 args tp =
@@ -192,7 +193,8 @@ and check_app_correctness env args tp eff1 =
       assert_subtype targ' targ;
       inner3 args tres
     | [], _ -> Utils.report_internal_error "Application with too few arguments"
-    | _ :: _, _ -> Utils.report_internal_error "Application with too many arguments"
+    | _ :: _, _ ->
+      Utils.report_internal_error "Application with too many arguments"
 
   (* inner3 will check (3) condition *)
   and inner3 args tp =
@@ -201,11 +203,13 @@ and check_app_correctness env args tp eff1 =
     | e :: args, TArrow(_, targ, tres) ->
       let targ', eff' = infer_type env e in
       if eff' = EffImpure then
-        Utils.report_internal_error "Application with impure effect. (3) condition broken.";
+        Utils.report_internal_error
+          "Application with impure effect. (3) condition broken.";
       assert_subtype targ' targ;
       inner3 args tres
     | [], tres -> tres, Effect.EffImpure
-    | _ :: _, _ -> Utils.report_internal_error "Application with too many arguments"
+    | _ :: _, _ ->
+      Utils.report_internal_error "Application with too many arguments"
 
 
   in inner1 args tp eff1

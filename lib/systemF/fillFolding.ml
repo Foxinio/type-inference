@@ -477,8 +477,10 @@ and coerse_argument env e expected =
           EFn(List.rev xs, body, tret)
         else
           let x' = Env.fresh_var () in
-          let body = inner1 (EVar x') expected [List.hd vars] actual expected in
-          let body' = ELet(x', unfold_app e' (List.rev @@ List.tl vars), body) in
+          let body =
+            inner1 (EVar x') expected [List.hd vars] actual expected in
+          let body' =
+            ELet(x', unfold_app e' (List.rev @@ List.tl vars), body) in
           EFn(List.rev xs, body', tret)
 
       (* e: (_->...->)-> *)
