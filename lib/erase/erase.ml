@@ -128,7 +128,7 @@ and tr_clauses env body_tp tp = function
       | [] when i = clause_count+1 ->
         List.rev acc
       | _ when i = clause_count+1 ->
-        Core.Utils.report_internal_error "Mismatch in clause count"
+        Core.Utils.report_internal_error "Missmatch in clause count"
       | clauses ->
         let x = VarTbl.fresh_var (VarTbl.gen_name ()) in
         let body = Ast.EApp(Builtin.fail "Match failure", [EUnit]) in

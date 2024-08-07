@@ -18,13 +18,10 @@ module VarTbl
 
   val fresh_var : string -> var_type
 end = struct
-  let debug fmt =
-    Utils.debug ("[Imast]"^^fmt)
 
   let counter = ref 0
   let gen_name () =
     let name = "#" ^ Utils.gen_name !counter in
-    debug "gen_name generated name: %d -> %s" !counter name;
     incr counter;
     name
 

@@ -49,13 +49,6 @@ let check_ctors env ctor_defs =
   in List.map f ctor_defs
 
 let rec infer_type env e =
-  let state = !counter in
-  mark "entering %s [%d]" (pp_syn_type e) state;
-  let res, eff = infer_type_aux env e in
-  mark "exiting %s [%d] : %s" (pp_syn_type e) state (PrettyPrinter.pp_type res);
-  res, eff
-
-and infer_type_aux env e =
   match e with
   | EUnit   -> TUnit, Effect.EffPure
   | EBool _ -> TBool, EffPure
@@ -136,18 +129,9 @@ and infer_type_aux env e =
     infer_type env body
 
   | ECtor (name, adt_args, body) ->
-    mark "[ECtor] entering %s" (PrettyPrinter.pp_lookup_var name);
     let expected, alias, tvars = Env.lookup_ctor env name in
     let tp, eff = infer_type env body in
     let adt_args' = List.map (check_well_scoped env) adt_args in
-    mark "[ECtor] getting substitution from [%s] to [%s]"
-      (PrettyPrinter.pp_type expected)
-      (PrettyPrinter.pp_type tp);
-    mark "[ECtor] substitution: [%s -> %s]"
-      (List.map PrettyPrinter.pp_type adt_args
-      |> String.concat ", ")
-      (List.map PrettyPrinter.pp_type adt_args'
-      |> String.concat ", ");
     TADT (alias, adt_args'), eff
 
   | EMatch(body, defs, tp) ->

@@ -24,9 +24,8 @@ let rec contains_uvar x t =
 
 let unify_with_uvar x tp =
   if contains_uvar x tp then raise Cannot_unify
-  else (
-    dump_uvar_set x tp;
-    Type.set_uvar x tp)
+  else
+    Type.set_uvar x tp
 
 let rec equal tp1 tp2 =
   match Type.view tp1, Type.view tp2 with
@@ -71,16 +70,6 @@ let rec equal tp1 tp2 =
     equal tp1a tp2a;
     equal tp1b tp2b
     | TPair _, _ -> raise Cannot_unify
-
-(* this function is only for debugging *)
-let equal expected actual =
-  let state = !counter in
-  mark "Unify.equal entering [%d]" state;
-  dump_type2 " =?= " expected actual;
-  equal expected actual;
-  dump_type2 " =?= " expected actual;
-  print_registered ();
-  mark "Unify.equal returned [%d]" state
 
 let equal e expected actual =
   try

@@ -1,17 +1,43 @@
-# Wiadomo Projekt Inżynieryjny
+# Argument folding analysis prototype
 
-## Opis projektu
-Tradycyjny system typów ml-polimorficznych z typami rekurencyjnymi z nazwanymi konstuktorami.
+## Language
+This program takes in code in ML-like language (refer to tests for syntax).
+Some fundamental features are implemented:
+- ML let-polymorphism,
+- Recursive algebraic data types,
+- Basic builtin types and functions.
 
-Główna różnica będzie taka, że funkcje przekazane jako argumenty będą przy pierwszym wywołaniu,
-gdzie wywołano je z n argumentami zostaną przypisane typ funkcji n-aragumentowej.
-Przy kolejnych wywołaniach jeśli zostanie wywołana z mniejszą ilością argumentów, np k zostanie obcięta
-do funkcji przyjmującej k argumentów i zwracającej funkcję przyjmującą n-k argumentów.
+## Objective
+All this to showcase argument folding analysis that is performed on the next stage.
+Objective of this analysis is to minimize number of cloasure alocations,
+by allowing multi-argument functions to be part of the type system.
 
+For exact theory behind it wait for paper that is currently in the making.
 
-## Cel Projektu
+## Usage
+### Requirements
+- `dune 3.13`
+- `ocaml 4.10.0`
+- `ocamllex` and `ocamlyacc`
 
-Celem będzie sprawdzenie jak takie podejście wpłynie na ergonomie programowania albo efektywność powstałego kodu.
+### Build
+Project can be build using `dune build` or `make build`.
 
-## Pomysl implementacyjny
-Pomysłem jest by przeprowadzić zwyczajną inferencję typów ze zmiennymi unifikacyjnymi
+### Run
+Using `make build` will create `a.out` link in main directory.
+To run only file with code is required.
+
+Useful cmd flags are:
+```
+--use-analysis   - will force program to use mentioned analysis.
+                   (this is also done by default)
+
+--crude-analysis - will disable analysis and force program to be executed
+                   as if all functions took only one argument (and were impure).
+
+--print-states
+--no-print-stats - will enable and disable printing of allocation counter
+                   (this is enabled by default).
+```
+Other flags are used for mostly for debugging.
+

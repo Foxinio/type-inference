@@ -4,7 +4,6 @@ open Core.Imast
 open Core.Utils
 open Uvar
 
-
 (* visited Set.t is not needed sanity check,
     uvars are prevented from forming cycles
     by checking `contains_uvar` before setting them *)

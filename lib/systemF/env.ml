@@ -33,29 +33,12 @@ let add_tbl tbl x tp =
 
 let add_var (env1,env2) x tp =
   add_tbl env1.constant x tp;
-  Utils2.mark "[Env] add_var [%s <- %s]"
-    (PrettyPrinter.pp_lookup_var x)
-    (PrettyPrinter.pp_type tp);
   (env1, add_var env2 x tp)
 
 let add_tvar (env1,env2) a =
   let b = TVar.fresh () in
-  Utils2.mark "[Env] add_tvar [%s ~> %s]"
-    (PrettyPrinter.pp_lookup_tvar a)
-    (PrettyPrinter.pp_lookup_tvar b);
   let env1 = { env1 with tvar_map = TVarMap.add a b env1.tvar_map} in
   (env1, add_tvar env2 a |> fst), b
-
-(* Just for debugging *)
-let add_ctor (ctor_name, template) adt_name adt_args =
-  Utils2.mark "[Env] add_ctor [%s(%s) : %s[%s]]"
-    (PrettyPrinter.pp_lookup_var ctor_name)
-    (PrettyPrinter.pp_type template)
-    (PrettyPrinter.pp_lookup_var adt_name)
-    (List.map PrettyPrinter.pp_lookup_tvar adt_args
-    |> String.concat ", ")
-
-(* ------------------------------------------------------------------------- *)
 
 let extend_var (env1,env2) xs tp =
   let rec inner env xs tp eff =
@@ -77,7 +60,6 @@ let extend_tvar env lst =
   List.fold_right f lst (env, [])
 
 let extend_ctors (env1,env2) lst alias_name tvars =
-  List.iter (fun ctor -> add_ctor ctor alias_name tvars) lst;
   env1, extend_ctors env2 lst alias_name tvars
 
 (* ------------------------------------------------------------------------- *)
@@ -103,18 +85,6 @@ let tvar_set (env,_) =
 let extend_clause env x ctor args =
   let template, alias', tvars = lookup_ctor env ctor in
   let substituted = Subst.subst_list template tvars args in
-  Utils2.mark "[Env] extend_clause %s [%s(%s) => %s]"
-    (PrettyPrinter.pp_lookup_var ctor)
-    (PrettyPrinter.pp_type template)
-    (List.map2 (fun x y ->
-      Printf.sprintf "%s <- %s"
-        (PrettyPrinter.pp_lookup_tvar x)
-        (PrettyPrinter.pp_type y)) tvars args
-    |> String.concat ", ")
-    (PrettyPrinter.pp_type substituted);
-  Utils2.mark "[Env] extend_clause [%s <- %s]"
-    (PrettyPrinter.pp_lookup_var x)
-    (PrettyPrinter.pp_type substituted);
   add_var env x substituted, alias'
 
 (* ------------------------------------------------------------------------- *)

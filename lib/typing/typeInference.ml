@@ -28,29 +28,16 @@ let rec is_value (e : 'a expr) =
 
 (** inference function *)
 let rec infer env (node : Imast.expl_type Imast.expr) =
-  let state = !counter in
-  mark "enter infer";
-  dump_expr' node;
-  mark "+++Pos: (%s)" (Utils.string_of_pp node.start_pos node.end_pos);
   let data, typ = tr_expr env node in
-  mark "---Pos: (%s)" (Utils.string_of_pp node.start_pos node.end_pos);
-  dump_type typ;
   Unify.equal node typ (tr_type node env node.typ);
-  let res = { node with data; typ=Schema.typ_mono typ } in
-  mark "exiting infer [%d]" state;
-  dump_expr res;
-  res
+  { node with data; typ=Schema.typ_mono typ }
 
 and tr_type node env explicit_type : Type.t =
-  mark "tr_type %s" (Imast.pp_expl_type VarTbl.find explicit_type);
   let unwrap = unwrap node env in
   let rec inner node env = function
     | Imast.TUnit -> Type.t_unit
     | Imast.THole ->
-      let uv = Env.fresh_uvar env in
-      mark "inner fresh_uvar: %s"
-      (PrettyPrinter.pp_type ~ctx:(get_ctx()) uv);
-      uv
+      Env.fresh_uvar env
     | Imast.TBool -> Type.t_bool
     | Imast.TInt  -> Type.t_int
     | Imast.TArrow(tp1, tp2) ->
@@ -116,67 +103,41 @@ and tr_expr env (e : Imast.expl_type Imast.expr) =
     let schema = Env.lookup_gamma env name
       |> unwrap name in
     let instantiated, args = Env.instantiate env schema in
-    mark "EVar(%s,[%s]) : %s" (VarTbl.find name)
-      (List.map (PrettyPrinter.pp_type ~ctx:(get_ctx())) args
-      |> String.concat ",")
-      (PrettyPrinter.pp_type ~ctx:(get_ctx()) instantiated);
-    mark "EVar(%s, schema) = %s" (VarTbl.find name) (pp_typ schema);
     EVar (name, List.map Schema.typ_mono args), instantiated
 
   | EFn(x, body) ->
-    let state = !counter in
-    mark "entering EFn(%s,body)" (VarTbl.find (fst x));
     let var, typ = tr_var env x in
-    dump_var var;
     let env = Env.extend_gamma env var in
     let body' = infer env body in
-    mark "exiting EFn(%s,body) [%d]" (VarTbl.find (fst x)) state;
     EFn (var, body'),
     Type.t_arrow typ (get_tp body')
 
   | EFix(f, x, body) ->
-    let state = !counter in
-    mark "entering EFix(%s,body)" (VarTbl.find (fst x));
     let x', typ = tr_var env x in
-    dump_var x';
     let env = Env.extend_gamma env x' in
     let f', f_tp = tr_var env f in
-    dump_var f';
     let tres = Env.fresh_uvar env in
-    dump_type2 "---" tres f_tp;
     let f_tp' = Type.t_arrow typ tres in
     Unify.equal e f_tp f_tp';
     let env = Env.extend_gamma env f' in
     let body' = infer_and_check_type env body tres in
-    mark "exiting EFix [%d]" state;
     EFix(f', x', body'), f_tp
 
   | EApp(e1, e2) ->
-    let state = !counter in
-    mark "entering EApp [%d]" state;
     let e1' = infer env e1 in
-    mark "EApp e1'.typ [%d] : %s" state (pp_typ e1'.typ);
     let e2' = infer env e2 in
-    mark "EApp e2'.typ [%d] : %s" state (pp_typ e2'.typ);
     let tres = Env.fresh_uvar env in
     Type.t_arrow (Schema.get_template e2'.typ) tres
     |> Unify.equal e (Schema.get_template e1'.typ);
-    mark "exiting EApp [%d] : %s" state
-      (PrettyPrinter.pp_type ~ctx:(get_ctx()) tres);
     EApp(e1', e2'), tres
 
   | ELet((x,tp), e1, e2) ->
     let env' = Env.increase_level_major env in
     let tp = tr_type e env' tp in
-    let state = !counter in
-    mark "ELet entered %s [%d]" (VarTbl.find x) state;
-    dump_var (x, Schema.typ_mono tp);
     let e1' = infer_and_check_type env' e1 tp in
     let x = if is_value e1'
       then x, Env.generalize env' tp
       else x, Schema.typ_mono (get_tp e1') in
-    mark "ELet generalised %s [%d]" (VarTbl.find @@ fst x) state;
-    dump_var ~register:false x;
     let e2' = infer (Env.extend_gamma env x) e2 in
     ELet(x, e1', e2'), get_tp e2'
 
@@ -245,13 +206,11 @@ and tr_expr env (e : Imast.expl_type Imast.expr) =
     ETypeAlias(alias, typ', rest'), get_tp rest'
 
   | EMatch (sub_expr, ((ctor_name, _, _) :: _ as clauses)) ->
-    mark "EMatch entered";
     let _, adt_typ = Env.lookup_ctor env ctor_name |> unwrap ctor_name in
     let var_set = Schema.get_arguments adt_typ in
     let mapping, instance_args = gen_mapping var_set in
     let adt_t, _ = Env.instantiate ~mapping env adt_typ in
     let sub_expr' = infer_and_check_type env sub_expr adt_t in
-    mark "EMatch subexpr infered : %s" (pp_typ sub_expr'.typ);
     let out_type = Env.fresh_uvar env in
     let f (ctor_name, (var_name, var_type), e) =
       let typ, _ = Env.lookup_ctor env ctor_name |> unwrap ctor_name in
@@ -269,7 +228,6 @@ and tr_expr env (e : Imast.expl_type Imast.expr) =
     EMatch (sub_expr', []), Env.fresh_uvar env
 
 and infer_and_check_type env e expected =
-  mark "infer_and_check_type entered";
   let e' = infer env e in
   Unify.equal e' expected (get_tp e');
   e'

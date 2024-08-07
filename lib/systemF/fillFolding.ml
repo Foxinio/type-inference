@@ -307,13 +307,6 @@ let rec is_coerse_id tp_expected tp_given =
   | _ -> true
 
 let rec transform_expr env e : expr * tp * Effect.t =
-  let state = !counter in
-  mark "entering %s [%d]" (pp_syn_type e) state;
-  let e', res, eff = transform_expr_aux env e in
-  mark "exiting %s [%d] : %s" (pp_syn_type e) state (PrettyPrinter.pp_type res);
-  e', res, eff
-
-and transform_expr_aux env e =
   match e with
   | EUnit -> e, TUnit, EffPure
   | EBool _ -> e, TBool, EffPure
@@ -431,7 +424,6 @@ and transform_expr_aux env e =
   *)
 and transform_app env e1' es tp eff =
   let counter = ref 0 in
-  mark "transform_app called with: %s" (PrettyPrinter.pp_type tp);
   let curring es tp eff =
     let rec generate_args args xs = function
       | TArrow(arr, _, tres) when Arrow.view_fold arr = FldFolded ->
@@ -456,24 +448,19 @@ and transform_app env e1' es tp eff =
     match es, tp with
 
     | [e], TArrow(arr, targ, tres) when Arrow.view_fold arr = FldUnfolded ->
-      mark "transform_app arg: %d, case single unfolded" !counter;
       let e', eff' = coerse_argument env e targ in
       let eff'', args = List.fold_left
         (fun (eff, acc) (e, eff') -> Effect.join eff eff', e :: acc)
         (eff,[])
         ((e', eff') :: acc) in
       incr counter;
-      mark "normal exit";
       EApp(e1', args), tres, eff''
 
 
     | [e], TArrow(arr, targ, tres) ->
-      mark "transform_app arg: %d, case single folded" !counter;
       let e', eff' = coerse_argument env e targ in
-      mark "exited coerse_arg %d" !counter;
       let e1wrapper, e1'' = make_wrapper e1' eff in
       incr counter;
-      mark "calling curring";
       let lets, args, xs, eff'' = curring ((e', eff') :: acc) tp eff in
       let curried = EFn(xs, EApp(e1'', args), tres) in
       let lets = List.fold_left
@@ -481,46 +468,32 @@ and transform_app env e1' es tp eff =
       e1wrapper lets, tres, eff''
 
     | e :: es, TArrow(arr, targ, tres) when Arrow.view_fold arr = FldFolded ->
-      mark "transform_app arg: %d, case rec folded" !counter;
       let e', eff' = coerse_argument env e targ in
-      mark "exited coerse_arg %d" !counter;
       incr counter;
-      mark "calling uncurring";
       uncurring ((e',eff') :: acc) es tres
 
     | e :: es, TArrow(arr, targ, tres) when Arrow.view_fold arr = FldUnfolded ->
-      mark "transform_app arg: %d, case rec unfolded" !counter;
       let e', eff' = coerse_argument env e targ in
-      mark "exited coerse_arg %d" !counter;
       let eff'', args = List.fold_left
         (fun (eff, acc) (e, eff') -> Effect.join eff eff', e :: acc)
         (eff,[])
         ((e', eff') :: acc) in
       incr counter;
-      mark "normal exit";
       transform_app env (EApp (e1', args)) es tp eff'
 
 
     | es, tp ->
-      mark "transform_app arg: %d, case that shouldn't exist" !counter;
       let eff', acc = List.fold_left
         (fun (eff, acc) (e, eff') -> Effect.join eff eff', e :: acc)
         (eff,[])
         acc in
       incr counter;
-      mark "calling transform_app";
       transform_app env (EApp (e1', acc)) es tp eff'
 
   in uncurring [] es tp
 
 and coerse_argument env e expected =
-  let state = !counter in
-  mark "coerse_argument entering with %s [%d]" (PrettyPrinter.pp_expr (Env.to_env2 env) e) state;
   let e', actual, eff = transform_expr env e in
-  mark "transform_expr returned with %s : %s<:%s [%d]"
-      (PrettyPrinter.pp_expr (Env.to_env2 env) e')
-      (PrettyPrinter.pp_type actual)
-      (PrettyPrinter.pp_type expected) state;
   if is_coerse_id actual expected then e', eff else
   let ewrapper, e' =
     match eff, expected with
@@ -530,11 +503,7 @@ and coerse_argument env e expected =
       (fun e2 -> ELet(x', e', e2)), EVar x'
     | _ -> Fun.id, e'
   in
-  mark "entering add_coersion with [%d]" state;
   let res = add_coersion env e' expected actual |> ewrapper, eff in
-  mark "coerse_argument exiting with (%s : %s) [%d]"
-      (PrettyPrinter.pp_expr (Env.to_env2 env) e')
-      (PrettyPrinter.pp_type expected) state;
   res
 
 and maybe_add_coersion env e' expected actual =
@@ -551,10 +520,7 @@ and add_coersion env e' expected actual =
 
   | TArrow _, TArrow _ ->
     let rec inner1 e' tret =
-      mark "entering inner1 with %s" (PrettyPrinter.pp_expr (Env.to_env2 env) e');
       let rec inner2 xs eff vars actual expected =
-        mark "entering inner2 with [%s<:%s]"
-            (PrettyPrinter.pp_type actual) (PrettyPrinter.pp_type expected);
         let arr1, _, actual   = destruct_tarrow actual in
         let arr2, _, expected = destruct_tarrow expected in
         match Arrow.view_fold arr1, Arrow.view_fold arr2 with
@@ -605,16 +571,13 @@ and add_coersion env e' expected actual =
 
 
 let transform_with_folding p =
-  dump_expr Env.empty p;
   ignore @@ fill_unfolds Env.empty p;
-  debug "analysis finished";
   Core.Utils.dump_ast (PrettyPrinter.pp_expr Utils2.Env.empty p);
   let p, _, _ = transform_expr Env.empty p in
   p
 
 let crude_transform_with_folding p =
   unfold_expr p;
-  debug "crude analysis finished";
   let p, _, _ = transform_expr Env.empty p in
   p
 

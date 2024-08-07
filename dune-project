@@ -1,5 +1,4 @@
 (lang dune 3.13)
-(using menhir 3.0)
 (wrapped_executables false)
 (map_workspace_root false)
 
@@ -8,22 +7,16 @@
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github Foxinio/type-inference))
 
-(authors "Author Name")
+(authors "Szymon Jędras")
 
-(maintainers "Maintainer Name")
+(maintainers "Szymon Jędras")
 
-(license LICENSE)
-
-(documentation https://url/to/documentation)
+(license MIT)
 
 (package
  (name prototyp)
- (synopsis "A short synopsis")
+ (synopsis "Argument folding analysis prototype")
  (description "A longer description")
- (depends ocaml dune)
- (tags
-  (topics "to describe" your project)))
-
-; See the complete stanza docs at https://dune.readthedocs.io/en/stable/dune-files.html#dune-project
+ (depends ocaml dune))

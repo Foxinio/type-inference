@@ -67,13 +67,6 @@ let rec extend_var env xs tp  arr =
 
 
 let rec fill_effects env e arr =
-  let state = !counter in
-  mark "entering %s [%d]" (pp_syn_type e) state;
-  let res = fill_effects_aux env e arr in
-  mark "exiting %s [%d] : %s" (pp_syn_type e) state (PrettyPrinter.pp_type res);
-  res
-
-and fill_effects_aux env e arr =
   let open Effect in
   match e with
   | EUnit   -> TUnit
@@ -170,12 +163,7 @@ and fill_effects_aux env e arr =
     let clause_counter = ref 0 in
     begin match fill_effects env body arr with
     | TADT(alias, args) ->
-      mark "[EMatch] fill_effects returned with %s(%s)"
-        (PrettyPrinter.pp_lookup_var alias)
-        (List.map PrettyPrinter.pp_type args
-        |> String.concat ", ");
       let f (ctor, x, e) =
-        mark "[EMatch] entering clause #%d" !clause_counter;
         incr clause_counter;
         let env, _ = Env.extend_clause env x ctor args in
         check_type env e tp' arr
@@ -399,7 +387,6 @@ let rec transform_expr env e : expr * tp * Effect.t =
     let clauses' = match body_tp with
     | TADT(alias, args) ->
       let f (ctor, x, e) =
-        mark "[EMatch] entering clause #%d" !clause_counter;
         incr clause_counter;
         let env, _ = Env.extend_clause env x ctor args in
         let e', tp, _ = transform_expr env e in
@@ -458,14 +445,12 @@ and transform_app env (e1', tp1, eff1) es' =
     else transform_app env res rest
 
 let transform_with_effects p =
-  dump_expr Env.empty p;
   ignore @@ fill_effects Env.empty p (Arrow.fresh ());
   let p, _, _ = transform_expr Env.empty p in
   p
 
 let crude_transform_with_effects p =
   impure_expr p;
-  debug "crude analysis finished";
   let p, _, _ = transform_expr Env.empty p in
   p
 
