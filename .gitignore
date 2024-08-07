@@ -1,13 +1,3 @@
 _build
 *.opam
-
-
-# latex outputs
-*.aux
-*.bbl
-*.blg
-*.fdb_latexmk
-*.fls
-*.log
-*.out
-*.toc
+a.out
