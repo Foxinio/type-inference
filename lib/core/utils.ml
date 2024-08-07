@@ -8,20 +8,20 @@ let split_list xs n =
   in
   inner [] (xs, n)
 
-let type_name_gen i =
+let gen_name i =
   let to_ascii x = Char.code 'a' + x |> Char.chr in
   let limit = (Char.code 'z') - (Char.code 'a') + 1 in
   let rec inner i =
     if i >= 0 && i < limit then to_ascii i |> String.make 1 
     else
       let minor = i mod limit |> inner
-      and major = i / limit |> inner in
+      and major = i / limit |> pred |> inner in
       major ^ minor
   in
   inner i
 
 let maybe_print cond s =
-  if !LmConfig.debug_log
+  if cond
   then Printf.eprintf "%s\n%!" s
 
 let debug fmt =
@@ -35,19 +35,8 @@ let dump_ast aststr =
   Printf.ksprintf (maybe_print !LmConfig.print_asts)
   "%s\n%s\n%s\n" wall aststr wall
 
-
-(** Exception that aborts the interpreter *)
-
-exception Syntax_error of string
-
-exception Fatal_error of string
-
-exception Internal_error of string
-
-exception Runtime_error of string
-
 let quit _ =
-  exit 1
+  raise Exit
 
 (** Pretty-printer of locations *)
 let string_of_pp (start_p : Lexing.position) (end_p : Lexing.position) =
@@ -75,7 +64,7 @@ let report_error_pp start_p end_p fmt =
   Printf.kfprintf
     quit
     stderr
-    ("%s: error: " ^^ fmt ^^ "\n")
+    ("%s: error:\n" ^^ fmt ^^ "\n")
     (string_of_pp start_p end_p)
 
 (** report an error related to given AST node, and raise Fatal_error *)
@@ -83,9 +72,13 @@ let report_error (node : ('a,'b) Ast.node) fmt =
   report_error_pp node.start_pos node.end_pos fmt
 
 let report_internal_error fmt =
-  Printf.kfprintf
-    quit
-    stderr
+  let f s =
+    if !LmConfig.verbose_internal_errors
+    then Printf.eprintf "%s" s
+    else Printf.eprintf "Internal error\n";
+    quit ()
+  in Printf.ksprintf
+    f
     ("Internal error: " ^^ fmt ^^ "\n")
 
 let report_runtime_error fmt =

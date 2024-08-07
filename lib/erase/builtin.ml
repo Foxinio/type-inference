@@ -46,13 +46,12 @@ let int1unit_fun f =
   | _ -> failwith "internal error")
 
 let printType str =
+  let dummy_argument = [EUnit] in
   let extern = EExtern(fun a ->
     match a with
-    (* TODO check why is VUnit here *)
-    | [VUnit] -> print_string str; VUnit
-    | _ -> failwith "internal error")
+    | _ -> print_string str; VUnit)
   in
-  EApp(extern, [EUnit])
+  EApp(extern, dummy_argument)
 
 let readInt =
   EExtern (fun a ->
@@ -102,7 +101,10 @@ let get_arity tp =
       | 0 :: xs -> xs
       | xs -> xs
 
-let fresh_var () = Core.Imast.IMAstVar.fresh ()
+let fresh_var () =
+  let name = Core.Imast.VarTbl.gen_name () in
+  let x = Core.Imast.VarTbl.fresh_var name in
+  x
 
 let string_of_int_list lst =
   List.map string_of_int lst |> String.concat ","
@@ -115,6 +117,7 @@ let lookup_builtin str tp_arity =
   in
   if List.equal (=) tp_arity arity then extern else
   match tp_arity, arity with
+  | [1;1;0], [2]
   | [1;1], [2] ->
     let x = fresh_var () in
     let y = fresh_var () in

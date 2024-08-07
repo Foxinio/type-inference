@@ -1,5 +1,5 @@
 module Core = Core
-module Core_parser = Core_parser
+module LmParser = LmParser
 module ToImast = ToImast
 module Typing = Typing
 module ToSystemF = ToSystemF
@@ -11,88 +11,95 @@ open LmConfig
 
 open Core
 
-let check_invariant f p =
-  f p;
-  p
+let stage_counter = ref 0
+let stages = [|
+  "Parser";
+  "Builtin insert";
+  "ToImast translation";
+  "Type inference";
+  "ToSystemF translation";
+  "Effect analysis";
+  "Folding analysis";
+  "WellTyped checking";
+  "Type erasure";
+  "Erase";
+  "Eval";
+|]
 
-let maybe_transform cond f =
-  if cond then f else Fun.id
+let mark transform p =
+  let p' = transform p in
+  let stage = stages.(!stage_counter) in
+  Utils.mark_stage "[%s] Passed" stage;
+  incr stage_counter;
+  p'
 
 let transform2 cond f1 f2 =
-  if cond then f1 else f2
+  let f = if cond then f1 else f2 in
+  mark f
+
+let check_invariant f p =
+  f p;
+  mark Fun.id p
 
 let dump pp p =
   let str = pp p in
   Utils.dump_ast str;
   p
 
-let mark stage p =
-  Utils.mark_stage "[%s] Passed" stage;
-  p
-
+let print_internal_error fmt =
+  let f s =
+    if !LmConfig.verbose_internal_errors
+    then (
+      Printf.eprintf "%s" s;
+      Printexc.print_backtrace stderr)
+    else Printf.eprintf "Internal error\n"
+  in Printf.ksprintf f fmt
 
 let pipeline (fname : string) =
   let open Core.Utils in
   try fname
-  |> Core_parser.parse_file
-  |> mark "Parser"
+  |> mark LmParser.parse_file 
 
-  |> Builtin.handle_buildins
-  |> mark "Builtin insert"
+  |> mark Builtin.handle_buildins
 
-  |> ToImast.translate
-  |> mark "ToImast translation"
+  |> mark ToImast.translate
+  |> dump Imast.pp_program
 
-  |> Typing.infer
-  |> mark "Type inference"
+  |> mark Typing.infer
   |> dump Typing.PrettyPrinter.pp_expr
 
-  |> ToSystemF.tr_program
-  |> mark "ToSystemF translation"
+  |> mark ToSystemF.tr_program
   |> dump SystemF.pp_program
 
   |> transform2 !LmConfig.use_analysis
       SystemF.transform_with_effects
       SystemF.crude_transform_with_effects
-  |> mark "Effect analysis"
   |> dump SystemF.pp_program
 
   |> transform2 !LmConfig.use_analysis
       SystemF.transform_with_folding
       SystemF.crude_transform_with_folding
-  |> mark "Effect analysis"
   |> dump SystemF.pp_program
 
   |> check_invariant SystemF.ensure_well_typed
-  |> mark "WellTyped checking"
   |> dump SystemF.pp_program
 
-  |> Erase.erase_type
-  |> mark "Type erasure"
+  |> mark Erase.erase_type
+  |> dump Erase.pp_program
 
-  |> Eval.eval_program
+  |> mark Eval.eval_program
   with
-  | Syntax_error str ->
-    Printf.eprintf "Syntax error: %s\n%!" str;
+  | Assert_failure (fname, line, char) -> (
+    print_internal_error "Assertion failed at: %s:%d:%d\n%!" fname line char;
+    Utils.mark_stage "[%s] Reached" stages.(!stage_counter);
     exit 1
-  | Fatal_error str ->
-    Printf.eprintf "Fatal error: %s\n%!" str;
+    )
+  | Exit ->
+    Utils.mark_stage "[%s] Reached" stages.(!stage_counter);
     exit 1
-  | Internal_error str ->
-    if !LmConfig.verbose_internal_errors
-    then Printf.eprintf "Internal error: %s\n%!" str
-    else Printf.eprintf "Internal error\n";
+  | e -> (
+    print_internal_error "Exception thrown: %s\n" (Printexc.to_string e);
+    Utils.mark_stage "[%s] Reached" stages.(!stage_counter);
     exit 1
-  | Runtime_error str ->
-    Printf.eprintf "Runtime error: %s\n%!" str;
-    exit 1
-  | Assert_failure (fname, line, char) ->
-    if !LmConfig.verbose_internal_errors
-    then Printf.eprintf "Assertion failed at: %s:%d:%d\n%!" fname line char
-    else Printf.eprintf "Internal error\n";
-    exit 1
-  | e ->
-    if !LmConfig.verbose_internal_errors
-    then Printf.eprintf "Unknown exception thrown\n"
-    else Printf.eprintf "Internal error\n";
-    exit 1
+    )
+

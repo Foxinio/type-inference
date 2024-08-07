@@ -36,6 +36,6 @@ let f1 a1 =
 let _ = map_pair (f1, f1) (A1 (), B1 ())
 
 in ()
-//@stderr: Levels difference.*t3
-//@stderr: Fatal_error
+//@stderr: file:.*error:
+//@stderr: Levels difference.*t3 escapes scope.
 //@code: 1

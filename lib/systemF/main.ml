@@ -42,7 +42,7 @@ type expr =
   | EIf     of expr * expr * expr
   | ESeq    of expr * expr
   | EType   of name * tvar list * ctor_def list * expr
-  | ECtor   of name * expr
+  | ECtor   of name * tp list * expr
 
   (* tp is type of `match expr with clauses` *)
   | EMatch  of expr * clause list * tp
@@ -65,4 +65,7 @@ let impure_arr = function
 let split_arr = function
   | TArrow (arr, _, _) -> Arrow.set_unfolded arr
   | _ -> ()
+
+exception Type_missmatch of tp * tp
+exception Unbound_tvar
 

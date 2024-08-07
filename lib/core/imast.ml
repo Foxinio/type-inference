@@ -18,10 +18,28 @@ module VarTbl
 
   val fresh_var : string -> var_type
 end = struct
+  let debug fmt =
+    Utils.debug ("[Imast]"^^fmt)
+
+  let counter = ref 0
+  let gen_name () =
+    let name = "#" ^ Utils.gen_name !counter in
+    debug "gen_name generated name: %d -> %s" !counter name;
+    incr counter;
+    name
+
   module VarTbl = IMAstVar.MakeHashtbl()
   type t = string VarTbl.t
 
   let instance : t = VarTbl.create 411
+
+  let find x =
+    match VarTbl.find_opt instance x with
+    | Some v -> v
+    | None ->
+      let name = gen_name () in
+      VarTbl.add instance x name;
+      name
 
   let find = VarTbl.find instance
 
@@ -34,20 +52,11 @@ end = struct
     add v x;
     v
 
-  let counter = ref 0
-  let gen_name () =
-    let limit = (Char.code 'z') - (Char.code 'a') + 1 in
-    let rec inner i =
-      if i >= 0 && i < limit then Char.chr i |> String.make 1 
-      else
-        let minor = i mod limit |> inner
-        and major = i / limit |> inner in
-        major ^ minor
-    in
-    let name = "#" ^ inner !counter in
-    incr counter;
-    name
 end
 
 type program = expl_type expr
 
+let pp_program p =
+  let string_of_var = VarTbl.find in
+  let string_of_type = pp_expl_type string_of_var in
+  string_of_expr p string_of_var string_of_type

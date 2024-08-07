@@ -1,9 +1,8 @@
 (library
- (name core_parser)
- (libraries core))
+ (name lmParser)
+ (libraries core)
+ (inline_tests)
+ (preprocess (pps ppx_inline_test)))
 
-
-(menhir 
-  (modules yaccParser)
-  (explain true))
+(ocamlyacc (modules yaccParser))
 (ocamllex lexer)

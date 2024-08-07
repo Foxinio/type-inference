@@ -76,4 +76,8 @@ let _ =
   Arg.parse cmd_args_options (fun s -> input_file := s) usage_string;
   if !LmConfig.verbose_internal_errors
   then wrap_excetion (fun () -> pipeline !input_file)
-  else pipeline !input_file
+  else if Sys.file_exists !input_file
+    then pipeline !input_file
+    else Printf.eprintf
+      "%s: cannot access '%s': no such file or directory\n"
+      Sys.argv.(0) !input_file

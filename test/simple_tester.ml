@@ -8,6 +8,12 @@ type expected = {
   loops : bool;
 }
 
+let log fmt =
+  let f str =
+    if true
+    then Printf.eprintf "%s" str
+  in Printf.ksprintf f ("[SimpleTester] "^^fmt^^"\n%!")
+
 let collect_metadata fd =
   let remove_prefix prefix s = 
     let l = String.length prefix in
@@ -32,9 +38,10 @@ let collect_metadata fd =
       else if String.starts_with ~prefix:"code:" command
       then (
         exit_code := remove_prefix "code:" command |> int_of_string;
+        log "setting exit code expectations to: %d" !exit_code;
         None)
       else (
-        Printf.eprintf "Warining: Unexpected meta command [%s]" command;
+        Printf.eprintf "Warining: Unexpected meta command [%s]\n" command;
         None)
   in
   let to_two_lists (seq : ('a, 'b) Either.t Seq.t) =
@@ -75,6 +82,17 @@ let run_program exec file args =
 (* ------------------------------------------------------------------------- *)
 
 let failed = ref false
+let output = ref ("", "")
+let register_stdout line =
+  output := fst !output^line^"\n", snd !output
+let register_stderr line =
+  output := fst !output, snd !output^line^"\n"
+
+let print_output () =
+  Printf.eprintf ("==========[ STDOUT ]==========\n"
+    ^^"%s\n"
+    ^^"==========[ STDERR ]==========\n"
+    ^^"%s\n") (fst !output) (snd !output)
 
 let assert_all_output expected where =
   if List.is_empty expected then () else (
@@ -87,10 +105,10 @@ let handle_exit (expected : expected) proc_status =
   assert_all_output expected.stderr "stderr";
   begin match proc_status with
   | Unix.WEXITED code ->
+    log "Program exited with code: %d" code;
     if code = expected.exit_code then () else (
     Printf.eprintf
-      "Error: Unexpected exit code: expected program to exit with %d
-      , but gotten %d instead.\n"
+      "Error: Unexpected exit code: expected program to exit with %d, but gotten %d instead.\n"
       expected.exit_code code;
     failed := true)
   | Unix.WSIGNALED s ->
@@ -116,15 +134,16 @@ let check_line expected actual =
       expected actual;
     failed := true)
 
-let readline_and_check expected fd =
+let readline_and_check register expected fd =
   match In_channel.input_line fd with
   | Some s ->
+    register s;
     let actual = String.trim s |> String.lowercase_ascii in
     check_line expected actual;
     []
   | None -> [expected]
 
-let readline fd =
+let readline register fd =
   match In_channel.input_line fd with
   | Some s -> String.trim s |> String.lowercase_ascii
   | None -> failwith
@@ -140,18 +159,18 @@ let loop_inside program =
   let handle_fd (expected, _ : expected * bool) fd =
     begin match expected.stdout, expected.stderr with
     | l :: ls, _ when fd = stdout ->
-      let ls = readline_and_check l program.stdout @ ls in
+      let ls = readline_and_check register_stdout l program.stdout @ ls in
       { expected with stdout=ls }
     | [], _ when fd = stdout ->
-      let line = readline program.stdout in
-      Printf.eprintf "Warning: unexpected print on stdout: %s" line;
+      let line = readline register_stdout program.stdout in
+      Printf.eprintf "Warning: unexpected print on stdout: \n[]%s" line;
       expected
     | _, l :: ls when fd = stderr ->
-      let ls = readline_and_check l program.stderr @ ls in
+      let ls = readline_and_check register_stderr l program.stderr @ ls in
       { expected with stderr=ls }
     | _, [] when fd = stderr ->
-      let line = readline program.stderr in
-      Printf.eprintf "Warning: unexpected print on stderr: %s" line;
+      let line = readline register_stderr program.stderr in
+      Printf.eprintf "Warning: unexpected print on stderr:\n[]%s" line;
       expected
     | _ -> failwith "impossible"
     end, true
@@ -207,9 +226,11 @@ let test_prog ?(check_loop=false) exec file args =
   match !failed with
   | true ->
     Printf.eprintf "Test failed  [%s]\n" file;
+    print_output ();
     exit 1
   | false ->
-    Printf.eprintf "Test passed  [%s]\n" file
+    Printf.eprintf "Test passed  [%s]\n" file;
+    print_output ()
 
 (* ========================================================================= *)
 
@@ -218,14 +239,19 @@ let main () =
     Printf.eprintf "Usage: %s EXEC FILE [ARGS]\n" Sys.argv.(0)
   ) else (
     if Sys.argv.(1) = "-check-loop" then (
+      Printf.eprintf "%s\nSimple Tester: %s\n%!"
+        (String.make 80 '#') Sys.argv.(3);
       Printf.printf "check loop enabled\n%!";
       test_prog ~check_loop:true Sys.argv.(2) Sys.argv.(3)
-        (Array.sub Sys.argv 4 (Array.length Sys.argv - 4))
-    ) else
+        (Array.sub Sys.argv 4 (Array.length Sys.argv - 4));
+    ) else (
+      Printf.eprintf "%s\nSimple Tester: %s\n%!"
+        (String.make 80 '#') Sys.argv.(2);
       test_prog
         Sys.argv.(1)
         Sys.argv.(2)
-        (Array.sub Sys.argv 3 (Array.length Sys.argv - 3))
+        (Array.sub Sys.argv 3 (Array.length Sys.argv - 3));
+      )
   )
 
 

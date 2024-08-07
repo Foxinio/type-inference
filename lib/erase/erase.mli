@@ -37,6 +37,8 @@ and clause = var * expr
 
 type program = expr
 
+val pp_program : program -> string
+
 (* ========================================================================= *)
 
 val erase_type : SystemF.program -> program

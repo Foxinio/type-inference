@@ -1,7 +1,7 @@
 
-.PHONY: all build watch test tex clean clean-all
+.PHONY: all build watch test clean
 
-all: build tex
+all: build
 
 build:
 	dune build
@@ -13,15 +13,6 @@ watch:
 test: build
 	@test/end2end/test.sh .
 
-tex:
-	$(MAKE) -C tex paper.pdf
-	$(MAKE) -C tex notes.pdf
-	$(MAKE) -C tex przyklad.pdf
-
 clean:
 	dune clean
-	$(MAKE) -C tex clean
 
-clean-all:
-	dune clean
-	latexmk -C tex clean-all

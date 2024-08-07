@@ -6,9 +6,10 @@ type t =
 
 let compare a b =
   match a, b with
-  | a, b when a = b -> 0
-  | _, EffImpure -> 1
-  | a, b -> - compare b a
+  | EffPure, EffPure -> 0
+  | EffPure, EffImpure -> -1
+  | EffImpure, EffPure -> 1
+  | EffImpure, EffImpure -> 0
 
 let join a b =
   match a, b with

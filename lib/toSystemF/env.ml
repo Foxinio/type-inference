@@ -1,6 +1,8 @@
 open Core.Imast
 open Typing
 
+exception Not_found_var of var_type
+exception Not_found_tvar of TVar.t
 
 type t = {
   tvar_map : SystemF.tvar TVarMap.t;
@@ -19,20 +21,20 @@ let add_tvar env (a : TVar.t) =
 let add_var env (a, tp) =
   { env with var_map = VarMap.add a tp env.var_map }
 
-let extend_tvar env =
-  let f (env, lst) x =
+let extend_tvar env lst =
+  let f x (env, lst) =
     let env, tvar = add_tvar env x in
     env, tvar::lst
   in
- List.fold_left f (env,[])
+ List.fold_right f lst (env,[])
 
 let lookup_tvar env x =
   match TVarMap.find_opt x env.tvar_map with
-  | None -> failwith "Internal error: unbound type variable"
+  | None -> raise (Not_found_tvar x)
   | Some x -> x
 
 let lookup_var env x =
   match VarMap.find_opt x env.var_map with
-  | None -> failwith "Internal error: unbound variable"
+  | None -> raise (Not_found_var x)
   | Some(SystemF.TForallT(args, _) as tp) -> tp, args
   | Some tp -> tp, []

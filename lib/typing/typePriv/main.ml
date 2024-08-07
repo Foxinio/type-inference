@@ -29,7 +29,7 @@ and view =
   | TPair  of t * t
 
 exception Cannot_compare of t * t
-exception Levels_difference of IMAstVar.t * Level.t * Level.t
+exception Level_difference of IMAstVar.t * Level.t * Level.t
 
 let t_unit  = TUnit
 let t_empty = TEmpty

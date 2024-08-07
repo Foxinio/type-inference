@@ -14,13 +14,12 @@
 %token TYP_KW_INT TYP_KW_BOOL TYP_KW_UNIT
 %token EOF
 
-%type<Ast.program> file
+%type<Core.Ast.program> file
 %start file
 
 %{
 include YaccParserPreamble
-open Core
-open Ast
+open Core.Ast
 %}
 
 %%
@@ -130,7 +129,7 @@ expr_app
 : expr_app expr_simple { make (EApp ($1, $2)) }
 | KW_FST   expr_simple { make (EFst $2)       }
 | KW_SND   expr_simple { make (ESnd $2)       }
-| UID      expr_simple { make (ECtor($1, $2)) }
+| UID      expr_simple { make (ECtor($1, [], $2)) }
 | expr_simple          { $1                   }
 ;
 

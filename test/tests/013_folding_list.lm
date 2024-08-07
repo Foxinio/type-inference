@@ -1,0 +1,18 @@
+type list 'a =
+  | Nil : unit
+  | Cons : 'a * list 'a
+
+let fold =
+		fix fold f acc lst =>
+    match lst with
+    | Nil _ => acc
+		| Cons lst =>
+			let hd = fst lst
+			let tl = snd lst
+			let acc = f acc hd
+			in
+			fold f acc tl
+		end
+let lst = (Cons (1, Cons (2, Cons (3, Cons (4, Cons (5, Nil ()))))))
+in
+fold add 0 lst

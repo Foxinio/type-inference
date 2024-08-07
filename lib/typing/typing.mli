@@ -54,7 +54,7 @@ module Type : sig
   val equal : t -> t -> bool
 
   exception Cannot_compare of t * t
-  exception Levels_difference of IMAstVar.t * Level.t * Level.t
+  exception Level_difference of IMAstVar.t * Level.t * Level.t
 
   module UVarSet : Set.S with type elt = uvar
 
@@ -66,8 +66,18 @@ module Type : sig
 end
 
 module PrettyPrinter : sig
-  val pp_type : Type.t -> string
+  type ('a, 'b, 'c) ctx
 
-  val pp_expr : Schema.typ expr -> string
+  val pp_context : unit -> ('a, 'b, var_type) ctx
+
+  val pp_lookup_tvar : ?ctx:(TVar.t, Type.uvar, var_type) ctx -> TVar.t -> string
+  val pp_lookup_var  : ?ctx:(TVar.t, Type.uvar, var_type) ctx -> var_type -> string
+  val pp_lookup_uvar : ?ctx:(TVar.t, Type.uvar, var_type) ctx -> Type.uvar -> string
+
+  val pp_type : ?ctx:(TVar.t, Type.uvar, var_type) ctx -> Type.t -> string
+
+  val pp_expr : ?ctx:(TVar.t, Type.uvar, var_type) ctx -> Schema.typ expr -> string
+
+  val pp_ctx : unit -> string
 end
 

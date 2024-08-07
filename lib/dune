@@ -7,7 +7,7 @@
  (libraries
    lmConfig
    core
-   core_parser
+   lmParser
    toImast
    typing
    toSystemF

@@ -72,7 +72,7 @@ type expr =
   | EIf     of expr * expr * expr
   | ESeq    of expr * expr
   | EType   of name * tvar list * ctor_def list * expr
-  | ECtor   of name * expr
+  | ECtor   of name * tp list * expr
   (* tp is type of `match expr with clauses` *)
   | EMatch  of expr * clause list * tp
 
@@ -94,12 +94,13 @@ module Env : sig
   val extend_tvar : t -> tvar list -> t * tvar list
   val extend_ctors : t -> (var * tp) list -> name -> tvar list -> t
   val extend_var  : t -> var list -> tp -> tp * t * Effect.t
+  val extend_clause : t -> var -> var -> tp list -> t * var
 
   val lookup_var  : t -> var -> tp
   val lookup_tvar : t -> tvar -> tvar
   val lookup_ctor : t -> var -> tp * name * tvar list
 
-  val tvar_set : t -> TVarSet.t
+  val to_env2 : t -> Utils2.Env.t
 end
 
 type program = expr
@@ -118,9 +119,21 @@ val supertype  : tp -> tp -> bool
 
 val pp_program : program -> string
 
-module PrettyPrinter : sig
-  val pp_type : tp -> string
+val subst_type : tp -> tvar -> tp -> tp
+val subst_list : tp -> tvar list -> tp list -> tp
 
-  val pp_expr : expr -> string
+module PrettyPrinter : sig
+  type ('a, 'c) ctx
+
+  val pp_context : unit -> (tvar, var) ctx
+
+  val pp_lookup_tvar : ?ctx:(tvar, var) ctx -> tvar -> string
+  val pp_lookup_var  : ?ctx:(tvar, var) ctx -> var -> string
+
+  val pp_type : ?ctx:(tvar, var) ctx -> tp -> string
+
+  val pp_expr : ?ctx:(Main.tvar, adtvar) ctx -> Env.t -> expr -> string
+
+  val pp_ctx : unit -> string
 end
 

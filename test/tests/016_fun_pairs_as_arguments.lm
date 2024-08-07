@@ -1,0 +1,13 @@
+let f1 a b c d = mult (add a b) (add c d)
+let f2 a b c d = add (mult a b) (mult c d)
+
+let x = f1 1 2 3 4
+let y = f2 2 3 4 5
+
+let g fs a b c d =
+	((fst fs) a b c d,
+	(snd fs) a b c d)
+
+let z = g (f1, f2) 2 3 4 5
+
+in z

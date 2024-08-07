@@ -45,7 +45,8 @@ let instatitate_schema mapping level (tp : t) tvars =
     res
 
 let instantiate ?(mapping=TVarMap.empty) level = function
-  | Mono tp -> tp, []
+  | Mono tp ->
+    tp, []
   | Schema (tp, tvars) ->
     instatitate_schema mapping level tp tvars
 
@@ -69,7 +70,6 @@ let generalize accepted_level tp =
       set_uvar x (TVar y)
     | tp -> default tp
   in 
-  (* ASK if this is correct solution *)
   iter helper tp;
   let uvset  = UVartbl.to_seq_values uvmapper |> TVarSet.of_seq in
   Schema (tp, uvset)

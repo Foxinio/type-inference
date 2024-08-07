@@ -1,14 +1,18 @@
 open Core.Imast
+open SystemF
+open Ast
 
 type t
 
 val empty : t
 
-val lookup_var : t -> VarMap.key -> SystemF.tp
-val lookup_ctor : t -> VarMap.key -> int * Ast.var
+val lookup_var : t -> var -> tp
+val lookup_ctor : t -> var -> int * var
+val lookup_clause_count : t -> var -> int
 
-val add_var : t -> VarMap.key -> SystemF.tp -> t
+val add_var : t -> var -> tp -> t
 
-val extend_vars : t -> VarMap.key list -> SystemF.tp -> t
-val extend_ctors : t -> VarMap.key Seq.t -> Ast.var -> t
+val extend_vars : t -> var list -> tp -> t
+val extend_clause : t -> var -> var -> tp list -> t
+val extend_ctors : t -> (var * tp) list -> tvar list -> var -> t
 

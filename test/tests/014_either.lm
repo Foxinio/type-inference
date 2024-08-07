@@ -1,0 +1,20 @@
+type either ('a, 'b) =
+	| Left  : 'a
+	| Right : 'b
+
+let left  = fn x => Left x
+let right = fn x => Right x
+
+let map f1 f2 e =
+	match e with
+	| Left l  => Left  (f1 l)
+	| Right r => Right (f2 r)
+	end
+
+let fold f1 f2 e =
+	match e with
+	| Left l  => f1 l
+	| Right r => f2 r
+	end
+
+in ()

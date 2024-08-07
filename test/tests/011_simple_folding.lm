@@ -5,8 +5,8 @@ let mod11 f a b =
 	let f' = f a in
 	f' b
 
-let _ = mod11 lam11
+let _ _ = mod11 lam11
 
-let _ = mod11 lam2
+let _ _ = mod11 lam2
 
 in ()

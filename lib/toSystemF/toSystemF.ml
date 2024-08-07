@@ -49,6 +49,17 @@ let rec mark_impure env = function
     (SystemF.PrettyPrinter.pp_type tp)
 
 let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
+  try
+    tr_expr_aux env e
+  with
+  | Env.Not_found_var x -> Core.Utils.report_error e
+      "Internal error: unbound variable: %s in %s" (Core.Imast.VarTbl.find x)
+      (Typing.PrettyPrinter.pp_expr e)
+  | Env.Not_found_tvar x -> Core.Utils.report_error e
+      "Internal error: unbound type variable: %s in %s" (TVar.to_string x)
+      (Typing.PrettyPrinter.pp_expr e)
+
+and tr_expr_aux env (e : Schema.typ Imast.expr) : SystemF.expr =
   match e.data with
   | Imast.EUnit -> SystemF.EUnit
   | Imast.EBool b -> SystemF.EBool b
@@ -112,8 +123,8 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
   | Imast.EType ((alias,_), [], rest) ->
     SystemF.EType(alias, [], [], tr_expr env rest)
 
-  | Imast.ECtor (name, body) ->
-    SystemF.ECtor (name, tr_expr env body)
+  | Imast.ECtor (name, args, body) ->
+    SystemF.ECtor (name, List.map (tr_typ env) args, tr_expr env body)
 
   | Imast.ETypeAlias (_, _, rest) ->
     (* at this point this expr doesn't do anything *)
@@ -121,9 +132,13 @@ let rec tr_expr env (e : Schema.typ Imast.expr) : SystemF.expr =
 
   | Imast.EMatch (sub_expr, clauses) ->
     let tp = Schema.get_template e.typ |> tr_type env in
-    let f (ctor,(x,_),e) = ctor, x, tr_expr env e in
+    let f (ctor,x,e) =
+      let x' = tr_var env x in
+      let env = Env.add_var env x' in
+      ctor, fst x', tr_expr env e in
     let clauses' = List.map f clauses in
     SystemF.EMatch(tr_expr env sub_expr, clauses', tp)
+
 
 and fold_fn env (body : Schema.typ Imast.expr) =
   let rec inner env acc (body : Schema.typ Imast.expr) =

@@ -16,6 +16,8 @@ type ('a, 'b, 'c) ctx_struct = {
   named: int;
 }
 
+type ('a, 'b, 'c) ctx = ('a, 'b, 'c) ctx_struct ref
+
 (* ========================================================================= *)
 (** Creates fresh pretty-printing context *)
 let pp_context () =
@@ -46,27 +48,35 @@ let pp_context_lookup x ctx =
     | _, Some str -> str
     | NamedVar _, None ->
       (* this shouldn't happen, internal error *)
-      let name = "#" ^ Utils.type_name_gen named in
+      let name = "#" ^ Utils.gen_name named in
       ctx := { !ctx with env=(x, name) :: env; named=named+1 };
       name
     | AnonVar _, None ->
-      let name = "'" ^ Utils.type_name_gen anons in
+      let name = "'" ^ Utils.gen_name anons in
       ctx := { !ctx with env=(x, name) :: env; anons=anons+1 };
       name
     | UVar uv, None ->
-      let name = "?" ^ Type.string_of_uvar uv ^ Utils.type_name_gen uvars in
+      let name = "?" ^ Utils.gen_name uvars in
       ctx := { !ctx with env=(x, name) :: env; uvars=uvars+1 };
       name
 
+let pp_lookup_var ?(ctx=pp_context ()) x =
+  pp_context_lookup (NamedVar x) ctx
+
+let pp_lookup_tvar ?(ctx=pp_context ()) x =
+  pp_context_lookup (AnonVar x) ctx
+
+let pp_lookup_uvar ?(ctx=pp_context ()) x =
+  pp_context_lookup (UVar x) ctx
 
 let rec pp_type ctx lvl tp =
   let rec matcher lvl = function
     | TVar x -> pp_context_lookup (AnonVar x) ctx
     | TADT (x, _, tps) -> 
       let x = pp_context_lookup (NamedVar x) ctx in
-      let tps = pp_list "," ctx 1 tps |> pp_at_level 1 (List.length tps) in
+      let tps = pp_list ", " ctx 0 tps in
       pp_at_level 0 lvl
-        (Printf.sprintf "%s %s" x tps)
+        (Printf.sprintf "%s[%s]" x tps)
     | TUnit  -> "Unit"
     | TEmpty -> "Empty"
     | TBool  -> "Bool"
@@ -74,29 +84,28 @@ let rec pp_type ctx lvl tp =
     | TUVar x -> pp_context_lookup (UVar x) ctx
     | TArrow(targ, tres) ->
       pp_at_level 0 lvl
-        (Printf.sprintf "%s -> %s" (pp_type ctx 0 targ) (pp_type ctx 0 tres))
+        (Printf.sprintf "%s -> %s" (pp_type ctx 1 targ) (pp_type ctx 0 tres))
     | TPair(tp1, tp2) ->
       pp_at_level 2 lvl
         (Printf.sprintf "%s * %s"
           (pp_type ctx 3 tp1)
           (pp_type ctx 3 tp2))
   and pp_list separator ctx lvl = function
-    | [ tp ] -> pp_type ctx (lvl-1) tp
+    | [ tp ] -> pp_type ctx lvl tp
     | tp :: tps ->
-      Printf.sprintf "%s %s %s"
+      Printf.sprintf "%s%s%s"
         (pp_type ctx lvl tp) separator (pp_list separator ctx lvl tps)
     | [] -> "Unit"
   in Type.view tp |> matcher lvl
 
-let pp_type = pp_type (pp_context ()) 0
+let pp_type ?(ctx=pp_context ()) = pp_type ctx 0
 
 (* ========================================================================= *)
 (** PrettyPrint expression *)
 
-let pp_expr e =
-  let ctx = pp_context () in
-  let string_of_var x = pp_context_lookup (NamedVar x) ctx in
-  let string_of_type tp = pp_type @@ Schema.get_template tp in
+let pp_expr ?(ctx=pp_context ()) e =
+  let string_of_var x = pp_lookup_var ~ctx x in
+  let string_of_type tp = pp_type ~ctx @@ Schema.get_template tp in
   Core.Imast.string_of_expr e string_of_var string_of_type
 
 

@@ -1,0 +1,5 @@
+let compose f g x = f (g x)
+let add1 x = add x 1
+let times2 x = mult x 2 in
+
+compose add1 times2 3

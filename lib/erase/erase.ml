@@ -44,11 +44,16 @@ let rec tr_expr env (e : SystemF.expr) : Ast.expr * SystemF.tp =
     let es', _ = List.map (tr_expr env) es |> List.split in
     EApp(e1', es'), take_n tp (List.length es')
 
-  | ETFn (_, body) ->
-    tr_expr env body
+  | ETFn (a, body) ->
+    let body', tp = tr_expr env body in
+    body', TForallT(a, tp)
 
-  | ETApp (e, _) ->
-    tr_expr env e
+  | ETApp (e, tps) ->
+    begin match tr_expr env e with
+      | e', TForallT(args, body) ->
+        e', SystemF.subst_list body args tps
+      | _ -> failwith "internal type error"
+    end
 
   | ELet (x, e1, e2) ->
     let e1', tp1 = tr_expr env e1 in
@@ -91,36 +96,39 @@ let rec tr_expr env (e : SystemF.expr) : Ast.expr * SystemF.tp =
     let e2', tp = tr_expr env e2 in
     ESeq (e1', e2'), tp
 
-  | EType (alias, _, ctor_defs, body) ->
-    let env = Env.extend_ctors env
-      (List.to_seq ctor_defs |> Seq.unzip |> fst) alias in
+  | EType (alias, tvars, ctor_defs, body) ->
+    let env = Env.extend_ctors env ctor_defs tvars alias in
     tr_expr env body
 
-  | ECtor (ctor_name, body) ->
+  | ECtor (ctor_name, adt_args, body) ->
     let ctor_name', adt_var = Env.lookup_ctor env ctor_name in
     let body', _ = tr_expr env body in
-    (* at this point only thing that matters is that it's adt
-       not it's arguments *)
-    ECtor (ctor_name', body'), TADT(adt_var, [])
+    ECtor (ctor_name', body'), TADT(adt_var, adt_args)
 
   | EMatch (sub_expr, clauses, tp) ->
-    let sub_expr', _ = tr_expr env sub_expr in
-    let clauses' = tr_clauses env tp clauses in
+    let sub_expr', body_tp = tr_expr env sub_expr in
+    let clauses' = tr_clauses env body_tp tp clauses in
     EMatch (sub_expr', clauses'), tp
 
-and tr_clauses env tp = function
+and tr_clauses env body_tp tp = function
   | [] when tp = SystemF.TEmpty -> Array.init 0 Obj.magic
   | [] -> failwith "internal error"
   | clauses ->
     let open Core.Imast in
+    let[@warning "-8"] SystemF.TADT(alias_name, adt_args) = body_tp in
+    let clause_count = Env.lookup_clause_count env alias_name in
     let f (ctor_name, x, body) =
       let ctor_name', _ = Env.lookup_ctor env ctor_name in
-      let body', _ = tr_expr env body in
+      let env' = Env.extend_clause env x ctor_name adt_args in
+      let body', _ = tr_expr env' body in
       (ctor_name', x, body')
     in let rec fill_clauses acc i = function
       | (ctor_name', _, _ as clause) :: clauses when i = ctor_name' ->
         fill_clauses (clause :: acc) (i+1) clauses
-      | [] -> List.rev acc
+      | [] when i = clause_count+1 ->
+        List.rev acc
+      | _ when i = clause_count+1 ->
+        Core.Utils.report_internal_error "Mismatch in clause count"
       | clauses ->
         let x = VarTbl.fresh_var (VarTbl.gen_name ()) in
         let body = Ast.EApp(Builtin.fail "Match failure", [EUnit]) in

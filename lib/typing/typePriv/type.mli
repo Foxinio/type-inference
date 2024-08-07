@@ -61,4 +61,4 @@ val uvar_compare : uvar -> uvar -> int
 val equal : t -> t -> bool
 
 exception Cannot_compare of t * t
-exception Levels_difference of IMAstVar.t * Level.t * Level.t
+exception Level_difference of IMAstVar.t * Level.t * Level.t

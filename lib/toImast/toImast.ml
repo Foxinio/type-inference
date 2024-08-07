@@ -91,10 +91,11 @@ and tr_expr_data env (e : Ast.expl_type Ast.expr) : expl_type expr_data =
         |> Env.extend_ctors env in
       let rest' = tr_expr env rest in
       EType((alias_name', alias_args'), ctors', rest')
-    | Ast.ECtor (name, e) ->
+    | Ast.ECtor (name, tps, e) ->
       let name' = Env.lookup_ctor env e name in
+      let tps'  = List.map (tr_type env e) tps in
       let e' = tr_expr env e in
-      ECtor (name', e')
+      ECtor (name', tps', e')
     | Ast.EMatch (e, clauses) ->
       let e' = tr_expr env e in
       let clauses' = List.map (tr_clauses env e) clauses in

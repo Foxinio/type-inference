@@ -35,7 +35,6 @@ let view_fold (x : uvar) =
 
 let view x = view_eff x, view_fold x
 
-(* ASK if this is what was expected *)
 let rec set_unfolded (x : uvar) =
   match !x with
   | Impure, FUnknown lst ->
@@ -103,7 +102,7 @@ let subtype x y =
   | (EffImpure, _), (EffPure, _) -> false
   | (EffImpure, FldFolded), (_, _) -> false
 
-let equal x y = subtype x y && subtype y x
+let equal x y = x = y
 
 let subtype_uvar x y =
   subtype (view x) (view y)

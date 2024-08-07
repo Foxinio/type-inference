@@ -69,7 +69,7 @@ let subst_prelude ast =
     | ESeq (a, b) -> ESeq (subst env a, subst env b)
     | ETypeAlias (a, b, c) -> ETypeAlias (a, b, subst env c)
     | EType (a, b, c) -> EType (a, b, subst env c)
-    | ECtor (a, b) -> ECtor (a, subst env b)
+    | ECtor (a, b, c) -> ECtor (a, b, subst env c)
     | EMatch (a, b) -> EMatch (subst env a, List.map (subst_clause env) b)
   and subst_clause env (name, var, e) =
     name, var, subst env e

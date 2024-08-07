@@ -1,0 +1,33 @@
+type list 'a =
+  | Nil : unit
+  | Cons : 'a * list 'a
+
+let empty = Nil ()
+
+let return a = Cons(a, empty)
+
+let rec append xs ys =
+	match xs with
+	| Nil _ => ys
+	| Cons a =>
+		let hd = fst a
+		let tl = snd a
+		in Cons (hd, append tl ys)
+	end
+
+let rec fold f acc lst =
+    match lst with
+    | Nil _ => acc
+    | Cons a =>
+			let hd = fst a
+			let tl = snd a
+			in fold f (f acc hd) tl
+		end
+in
+let map f lst =
+    fold (fn acc x => append acc (return (f x))) empty lst
+in
+let double x = mult x 2 in
+let y = map double (Cons (1, Cons (2, Cons (3, Cons (4, Cons (5, empty)))))) in
+printType y
+

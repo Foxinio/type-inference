@@ -7,11 +7,12 @@ type 'typ def =
   | DTypeAlias of alias * 'typ
 
 let make data =
-  { data      = data;
-    typ       = THole;
-    start_pos = Parsing.symbol_start_pos ();
-    end_pos   = Parsing.symbol_end_pos ();
-  }
+    let res = { data;
+        typ       = THole;
+        start_pos = Parsing.symbol_start_pos ();
+        end_pos   = Parsing.symbol_end_pos ();
+      } in
+    res
 
 let make_with_typ data typ =
   { (make data) with typ=typ }
@@ -21,7 +22,7 @@ let make_with_typ data typ =
     (if no argument was annotated with a type, second result is a THole *)
 let extract args typ =
   let extract_ids arg = (arg.data, arg.typ) in
-  let found = ref (typ = THole) in
+  let found = ref (typ <> THole) in
   let extract_typ = function
     | {typ=THole; _}   -> THole
     | {typ=tp;_} -> found := true; tp
@@ -94,3 +95,80 @@ let desugar_type_alias id args =
   end else TAlias (id, args)
 
 
+(* ######################################################################### *)
+(* TESTS *)
+
+let%test_module "LmParser.YaccParserPreambule Testing module" =
+  (module struct
+
+  let cmp (a,_) b = String.equal a b
+  let corr_args = ["x1"; "x2"; "x3"]
+  let args = List.map make corr_args
+  let typ  = THole
+  let body = make EUnit
+  let print_expl tp = pp_expl_type Fun.id tp |> prerr_endline
+
+  let%test "extract test typ=THole" =
+    let args', typ' = extract args typ in
+    List.for_all2 cmp args' corr_args && typ' = THole
+
+(* ------------------------------------------------------------------------- *)
+
+  let unfold_fn e =
+    let rec inner acc tres = function
+    | EFn(arg, body) -> inner (arg::acc) body.typ body.data
+    | _ -> List.rev acc, body, tres
+    in match e.data with
+    | EFn(arg, body) -> inner [arg] body.typ body.data, e.typ
+    | _ -> raise (Invalid_argument "unfold_fn expects an arrow")
+
+  let%test "fold_fn test: simple" =
+    let fn = desugar_fn args body typ in
+    let (args', body', tres'), typ' = unfold_fn fn in
+    List.for_all2 cmp args' corr_args
+    && typ' = typ
+    && body' = body
+    && tres' = THole
+
+  let%test "fold_fn test: one annotated arg" =
+    let x' = "x'" in
+    let corr_typ = TArrow(TUnit, TArrow(THole, TArrow(THole, TArrow(THole, THole)))) in
+    let fn = desugar_fn (make_with_typ x' TUnit :: args) body typ in
+    let (args', body', tres), typ' = unfold_fn fn in
+    List.for_all2 cmp args' (x'::corr_args)
+    && typ' = corr_typ
+    && body' = body
+    && tres = THole
+
+(* ------------------------------------------------------------------------- *)
+
+  let unfold_fix e =
+    let rec inner acc = function
+    | EFn(arg, body) -> inner (arg::acc) body.data
+    | _ -> List.rev acc, body
+    in match e.data with
+    | EFix((_,typ), arg, body) -> inner [arg] body.data, e.typ, typ
+    | _ -> raise (Invalid_argument "unfold_fn expects an arrow")
+
+  let%test "fold_fix test: one annotated arg" =
+    let x' = "x'" in
+    let corr_typ = TArrow(TUnit, TArrow(THole, TArrow(THole, TArrow(THole, THole)))) in
+    let fn = desugar_fix "" (make_with_typ x' TUnit :: args) body typ in
+    let (args', body'), typ', ftyp = unfold_fix fn in
+    assert (List.for_all2 cmp args' (x'::corr_args));
+    assert (typ' = corr_typ);
+    assert (body' = body);
+    assert (typ' = ftyp);
+    true
+
+  let%test "fold_fix test: annotated result" =
+    let corr_typ = TArrow(THole, TArrow(THole, TArrow(THole, TInt))) in
+    let fn = desugar_fix "" args body TInt in
+    let (args', body'), typ', ftyp = unfold_fix fn in
+    assert (List.for_all2 cmp args' corr_args);
+    assert (typ' = corr_typ);
+    assert (body' = body);
+    assert (typ' = ftyp);
+    true
+
+end)

@@ -25,7 +25,7 @@ let rec set_uvar x tp =
     lower_uvar_level level x tp;
     x := {!x with value=Realised tp }
   | { value=Realised _;_ } ->
-    failwith "tried to set realised uvar"
+    Core.Utils.report_internal_error "Tried to set realised uvar"
 
 and lower_uvar_level level' x (tp : t) =
     let rec inner = function
@@ -33,7 +33,7 @@ and lower_uvar_level level' x (tp : t) =
           when Level.compare level' level < 0 ->
         x := { !x with value=Unrealised level' };
       | TADT (adt, adtlevel, _) when Level.compare adtlevel level' > 0->
-        raise (Levels_difference (adt, adtlevel, level'))
+        raise (Level_difference (adt, adtlevel, level'))
       | TUnit | TEmpty | TBool | TInt | TVar _
       | TUVar ({contents={value=Unrealised _;_}}) -> ()
       | TUVar ({contents={value=Realised tp;_}}) ->

@@ -1,22 +1,31 @@
-open Core
 open Main
-open Subst
-open Order
+open Utils
 
-(* TODO check type eq instead of subtyping in whole program *)
-let assert_type_eq tp1 tp2 =
+module Effect = Core.Effect
+
+let assert_type_eq env e tp1 tp2 =
   if Order.type_equal tp1 tp2 then () else
-  Utils.report_internal_error "At checking well-scoped type equality, failed"
+  let estr = PrettyPrinter.pp_expr (Env.to_env2 env) e in
+  Core.Utils.report_internal_error ("At checking well-scoped type equality"
+    ^^ ", failed.\nExpected %s,\nActual %s in %s")
+    (PrettyPrinter.pp_type tp1) (PrettyPrinter.pp_type tp2) estr
 
-let assert_subtype tp1 tp2 =
-  if Order.subtype tp1 tp2 then () else
-  Utils.report_internal_error "At checking well-scoped type subtyping, failed"
 
-let assert_subeffect e eff1 eff2 =
-  if Effect.compare eff1 eff2 <= 0 then () else
-  Utils.report_internal_error ("At checking well-scoped effect subeffecting"
+let assert_subtype env e tp1 tp2 =
+  (* at this point we expect number of arguments to be correct,
+      so we check with fold equality *)
+  if Order.fold_equal_subtype tp1 tp2 then () else
+  let estr = PrettyPrinter.pp_expr (Env.to_env2 env) e in
+  Core.Utils.report_internal_error ("At checking well-scoped type subtyping"
     ^^ ", failed. Expected %s, Actual %s in %s")
-    (Effect.to_string eff2) (Effect.to_string eff1) (PrettyPrinter.pp_expr e)
+  (PrettyPrinter.pp_type tp1) (PrettyPrinter.pp_type tp2) estr
+
+let assert_subeffect env e eff1 eff2 =
+  if Core.Effect.compare eff1 eff2 <= 0 then () else
+  let estr = PrettyPrinter.pp_expr (Env.to_env2 env) e in
+  Core.Utils.report_internal_error ("At checking well-scoped effect subeffecting"
+    ^^ ", failed. Expected %s, Actual %s in %s")
+    (Effect.to_string eff2) (Effect.to_string eff1) estr
 
 (** Checks if type is well-scoped, and refresh its type variables according to
     the environment *)
@@ -34,7 +43,19 @@ let rec check_well_scoped env tp =
   | TADT(a, tps) ->
     TADT(a, List.map (check_well_scoped env) tps)
 
+let check_ctors env ctor_defs =
+  let f (x, tp) = 
+    x, check_well_scoped env tp
+  in List.map f ctor_defs
+
 let rec infer_type env e =
+  let state = !counter in
+  mark "entering %s [%d]" (pp_syn_type e) state;
+  let res, eff = infer_type_aux env e in
+  mark "exiting %s [%d] : %s" (pp_syn_type e) state (PrettyPrinter.pp_type res);
+  res, eff
+
+and infer_type_aux env e =
   match e with
   | EUnit   -> TUnit, Effect.EffPure
   | EBool _ -> TBool, EffPure
@@ -68,7 +89,7 @@ let rec infer_type env e =
     begin match infer_type env e with
     | TForallT(args, body), eff when List.length args = List.length tps ->
       let tps = List.map (check_well_scoped env) tps in
-      subst_list body args tps, eff
+      Subst.subst_list body args tps, eff
     | _ -> failwith "Internal type error"
     end
 
@@ -110,24 +131,32 @@ let rec infer_type env e =
 
   | EType(alias, tvars, ctor_defs, body) ->
     let env, tvars = Env.extend_tvar env tvars in
-    let env = Env.extend_ctors env ctor_defs alias tvars in
+    let ctor_defs' = check_ctors env ctor_defs in
+    let env = Env.extend_ctors env ctor_defs' alias tvars in
     infer_type env body
 
-  | ECtor (name, body) ->
+  | ECtor (name, adt_args, body) ->
+    mark "[ECtor] entering %s" (PrettyPrinter.pp_lookup_var name);
     let expected, alias, tvars = Env.lookup_ctor env name in
     let tp, eff = infer_type env body in
-    let _, adt_args = Subst.get_subst (Env.tvar_set env) expected tp in
-    TADT (alias, adt_args), eff
+    let adt_args' = List.map (check_well_scoped env) adt_args in
+    mark "[ECtor] getting substitution from [%s] to [%s]"
+      (PrettyPrinter.pp_type expected)
+      (PrettyPrinter.pp_type tp);
+    mark "[ECtor] substitution: [%s -> %s]"
+      (List.map PrettyPrinter.pp_type adt_args
+      |> String.concat ", ")
+      (List.map PrettyPrinter.pp_type adt_args'
+      |> String.concat ", ");
+    TADT (alias, adt_args'), eff
 
   | EMatch(body, defs, tp) ->
     let res_tp = check_well_scoped env tp in
     begin match infer_type env body with
     | TADT(alias, args), _ ->
       let f (ctor, x, e) =
-        let expected, alias', tvars = Env.lookup_ctor env ctor in
-        assert (Imast.IMAstVar.compare alias alias' = 0);
-        let substituted = Subst.subst_list expected tvars args in
-        let env = Env.add_var env x substituted in
+        let env, alias' = Env.extend_clause env x ctor args in
+        assert(Core.Imast.IMAstVar.compare alias alias' = 0);
         let _ = check_type env e res_tp in ()
       in
       List.iter f defs;
@@ -142,13 +171,13 @@ let rec infer_type env e =
 
 and check_type env e tp =
   let tp', eff' = infer_type env e in
-  assert_subtype tp' tp;
+  assert_type_eq env e tp' tp;
   eff'
 
 and check_type_and_effect env e tp eff =
   let tp', eff' = infer_type env e in
-  assert_subtype tp' tp;
-  assert_subeffect e eff' eff
+  assert_subtype env e tp' tp;
+  assert_subeffect env e eff' eff
 
 
 (*
@@ -177,10 +206,10 @@ and check_app_correctness env args tp eff1 =
       inner2 args tp
     | e :: args, TArrow(arr, targ, tres) ->
       let targ', eff' = infer_type env e in
-      assert_subtype targ' targ;
+      assert_subtype env e targ' targ;
       inner1 args tres (Effect.join eff eff')
     | _ :: _, _ ->
-      Utils.report_internal_error "Application with too many arguments"
+      Utils.report_too_many_arguments ()
 
   (* inner2 will check (2) condition *)
   and inner2 args tp =
@@ -190,11 +219,12 @@ and check_app_correctness env args tp eff1 =
     match args, tp with
     | e :: args, TArrow(arr, targ, tres) ->
       let targ', _ = infer_type env e in
-      assert_subtype targ' targ;
+      assert_subtype env e targ' targ;
       inner3 args tres
-    | [], _ -> Utils.report_internal_error "Application with too few arguments"
+    | [], _ ->
+      Utils.report_not_enough_arguments ()
     | _ :: _, _ ->
-      Utils.report_internal_error "Application with too many arguments"
+      Utils.report_too_many_arguments ()
 
   (* inner3 will check (3) condition *)
   and inner3 args tp =
@@ -203,13 +233,13 @@ and check_app_correctness env args tp eff1 =
     | e :: args, TArrow(_, targ, tres) ->
       let targ', eff' = infer_type env e in
       if eff' = EffImpure then
-        Utils.report_internal_error
+        Core.Utils.report_internal_error
           "Application with impure effect. (3) condition broken.";
-      assert_subtype targ' targ;
+      assert_subtype env e targ' targ;
       inner3 args tres
     | [], tres -> tres, Effect.EffImpure
     | _ :: _, _ ->
-      Utils.report_internal_error "Application with too many arguments"
+      Utils.report_too_many_arguments ()
 
 
   in inner1 args tp eff1
@@ -217,8 +247,8 @@ and check_app_correctness env args tp eff1 =
 let ensure_well_typed p =
   let env = Env.empty in
   ignore @@ infer_type env p;
-  if !LmConfig.print_env then (
-    Printf.eprintf "Env: %s\n%!" (Env.pp_vars env));
+  Core.Utils.maybe_print !LmConfig.print_env
+    (Printf.sprintf "Env: %s" (Env.pp_vars env));
   ()
 
 
